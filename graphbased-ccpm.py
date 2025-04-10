@@ -387,113 +387,6 @@ class CCPMScheduler:
 
         return self.tasks
 
-    def visualize_schedule(self, filename=None):
-        """Visualize the project schedule as a Gantt chart."""
-        fig, ax = plt.subplots(figsize=(12, 8))
-
-        # Sort tasks by start date
-        sorted_tasks = sorted(self.tasks.values(), key=lambda x: x.start_date)
-
-        # Plot each task
-        for i, task in enumerate(sorted_tasks):
-            start_day = (task.start_date - self.start_date).days
-            duration = task.duration
-
-            # Critical chain tasks in red, feeding chain tasks in orange, others in blue
-            if task.id in self.critical_chain:
-                color = "red"
-                alpha = 0.6
-            elif any(
-                task.id in chain_info["chain"] for chain_info in self.feeding_chains
-            ):
-                color = "orange"
-                alpha = 0.6
-            else:
-                color = "blue"
-                alpha = 0.6
-
-            # Plot the task bar
-            ax.barh(i, duration, left=start_day, color=color, alpha=alpha)
-
-            # Add task name and ID
-            ax.text(
-                start_day + duration / 2,
-                i,
-                f"{task.id}: {task.name}",
-                ha="center",
-                va="center",
-                color="black",
-            )
-
-        # Add feeding buffers
-        buffer_count = 0
-        for chain_info in self.feeding_chains:
-            last_task_id = chain_info["last_task"]
-            buffer_size = self.feeding_buffers.get(last_task_id, 0)
-
-            if buffer_size > 0:
-                last_task = self.tasks[last_task_id]
-                buffer_start_day = (last_task.end_date - self.start_date).days
-
-                # Plot the feeding buffer
-                ax.barh(
-                    len(sorted_tasks) + 1 + buffer_count,
-                    buffer_size,
-                    left=buffer_start_day,
-                    color="yellow",
-                    alpha=0.6,
-                )
-                ax.text(
-                    buffer_start_day + buffer_size / 2,
-                    len(sorted_tasks) + 1 + buffer_count,
-                    f"Feeding Buffer ({chain_info['last_task']} → {chain_info['connects_to']})",
-                    ha="center",
-                    va="center",
-                    color="black",
-                )
-                buffer_count += 1
-
-        # Add project buffer
-        if self.project_buffer:
-            last_task_end = max(task.end_date for task in self.tasks.values())
-            buffer_start_day = (last_task_end - self.start_date).days
-            ax.barh(
-                len(sorted_tasks) + 1 + buffer_count,
-                self.project_buffer,
-                left=buffer_start_day,
-                color="green",
-                alpha=0.6,
-            )
-            ax.text(
-                buffer_start_day + self.project_buffer / 2,
-                len(sorted_tasks) + 1 + buffer_count,
-                "Project Buffer",
-                ha="center",
-                va="center",
-                color="black",
-            )
-
-        # Format the chart
-        row_count = len(sorted_tasks) + 2 + buffer_count
-        ax.set_yticks(range(row_count))
-        yticklabels = [task.name for task in sorted_tasks] + [""] * (buffer_count + 1)
-        from matplotlib.ticker import FuncFormatter
-
-        # Define a formatter for y-axis labels if needed
-        formatter = FuncFormatter(
-            lambda x, _: yticklabels[int(x)] if int(x) < len(yticklabels) else ""
-        )
-        ax.yaxis.set_major_formatter(formatter)
-        ax.set_xlabel("Days from project start")
-        ax.set_title("CCPM Project Schedule")
-        ax.grid(axis="x", alpha=0.3)
-
-        # Save or show the chart
-        if filename:
-            plt.savefig(filename)
-        plt.tight_layout()
-        plt.show()
-
     def visualize_dependency_network(self, filename=None):
         """Visualize the task dependency network with critical chain and feeding chains highlighted."""
         G = self.task_graph
@@ -689,11 +582,274 @@ class CCPMScheduler:
 
         return "\n".join(report)
 
+    def visualize_schedule(self, filename=None):
+        """Visualize the project schedule as a Gantt chart with resource utilization."""
+        import matplotlib.pyplot as plt
+        import matplotlib.gridspec as gridspec
+        from matplotlib.ticker import FuncFormatter
 
-# Example usage
+        # Calculate the project duration for x-axis sizing
+        last_task_end = max(task.end_date for task in self.tasks.values())
+        project_duration = (last_task_end - self.start_date).days
+        if self.project_buffer:
+            project_duration += self.project_buffer
+
+        # Convert to integer to avoid the range() error
+        project_duration_int = int(project_duration)
+
+        # Create figure with GridSpec to have two subplots
+        fig = plt.figure(figsize=(14, 12))
+        gs = gridspec.GridSpec(
+            2, 1, height_ratios=[3, 1], hspace=0.3
+        )  # 3:1 ratio for Gantt:Resources with spacing
+
+        # Gantt chart subplot
+        ax_gantt = fig.add_subplot(gs[0])
+
+        # Sort tasks by start date
+        sorted_tasks = sorted(self.tasks.values(), key=lambda x: x.start_date)
+
+        # Plot each task
+        for i, task in enumerate(sorted_tasks):
+            start_day = (task.start_date - self.start_date).days
+            duration = task.duration
+
+            # Critical chain tasks in red, feeding chain tasks in orange, others in blue
+            if task.id in self.critical_chain:
+                color = "red"
+                alpha = 0.6
+            elif any(
+                task.id in chain_info["chain"] for chain_info in self.feeding_chains
+            ):
+                color = "orange"
+                alpha = 0.6
+            else:
+                color = "blue"
+                alpha = 0.6
+
+            # Plot the task bar
+            ax_gantt.barh(i, duration, left=start_day, color=color, alpha=alpha)
+
+            # Format the resource list
+            if isinstance(task.resources, str):
+                resource_str = task.resources
+            elif isinstance(task.resources, list):
+                resource_str = ", ".join(task.resources)
+            else:
+                resource_str = ""
+
+            # Add task name, ID and resources
+            ax_gantt.text(
+                start_day + duration / 2,
+                i,
+                f"{task.id}: {task.name} [{resource_str}]",
+                ha="center",
+                va="center",
+                color="black",
+            )
+
+        # Add feeding buffers
+        buffer_count = 0
+        for chain_info in self.feeding_chains:
+            last_task_id = chain_info["last_task"]
+            buffer_size = self.feeding_buffers.get(last_task_id, 0)
+
+            if buffer_size > 0:
+                last_task = self.tasks[last_task_id]
+                buffer_start_day = (last_task.end_date - self.start_date).days
+
+                # Plot the feeding buffer
+                ax_gantt.barh(
+                    len(sorted_tasks) + 1 + buffer_count,
+                    buffer_size,
+                    left=buffer_start_day,
+                    color="yellow",
+                    alpha=0.6,
+                )
+                ax_gantt.text(
+                    buffer_start_day + buffer_size / 2,
+                    len(sorted_tasks) + 1 + buffer_count,
+                    f"Feeding Buffer ({chain_info['last_task']} → {chain_info['connects_to']})",
+                    ha="center",
+                    va="center",
+                    color="black",
+                )
+                buffer_count += 1
+
+        # Add project buffer
+        if self.project_buffer:
+            last_task_end = max(task.end_date for task in self.tasks.values())
+            buffer_start_day = (last_task_end - self.start_date).days
+            ax_gantt.barh(
+                len(sorted_tasks) + 1 + buffer_count,
+                self.project_buffer,
+                left=buffer_start_day,
+                color="green",
+                alpha=0.6,
+            )
+            ax_gantt.text(
+                buffer_start_day + self.project_buffer / 2,
+                len(sorted_tasks) + 1 + buffer_count,
+                "Project Buffer",
+                ha="center",
+                va="center",
+                color="black",
+            )
+
+        # Format the Gantt chart
+        row_count = len(sorted_tasks) + 2 + buffer_count
+        ax_gantt.set_yticks(range(row_count))
+        yticklabels = [task.name for task in sorted_tasks] + [""] * (buffer_count + 1)
+
+        # Define a formatter for y-axis labels if needed
+        formatter = FuncFormatter(
+            lambda x, _: yticklabels[int(x)] if int(x) < len(yticklabels) else ""
+        )
+        ax_gantt.yaxis.set_major_formatter(formatter)
+        ax_gantt.set_title("CCPM Project Schedule")
+        ax_gantt.grid(axis="x", alpha=0.3)
+
+        # Calculate resource utilization
+        resource_usage = self._calculate_resource_utilization()
+
+        # Resource utilization subplot
+        ax_resource = fig.add_subplot(gs[1], sharex=ax_gantt)
+
+        # Use the defined resources from the scheduler
+        all_resources = self.resources
+
+        # Plot resource utilization
+        for i, resource in enumerate(all_resources):
+            usage = resource_usage.get(resource, {})
+            days = list(usage.keys())
+            demands = [usage[day] for day in days]
+
+            # For each day with demand, place a text annotation
+            for day, demand in zip(days, demands):
+                if demand > 0:
+                    ax_resource.text(
+                        day,
+                        i,
+                        str(demand),
+                        ha="center",
+                        va="center",
+                        fontweight="bold",
+                        bbox=dict(
+                            boxstyle="round,pad=0.3",
+                            fc=self._get_demand_color(demand),
+                            ec="black",
+                            alpha=0.6,
+                        ),
+                    )
+
+        # Format the resource chart
+        ax_resource.set_xlabel("Days from project start")
+        ax_resource.set_ylabel("Resources")
+        ax_resource.set_title("Resource Utilization")
+        ax_resource.set_yticks(range(len(all_resources)))
+        ax_resource.set_yticklabels(all_resources)
+
+        # Create grid aligned with days - Make sure to use integers for range()
+        ax_resource.set_xticks(
+            range(0, project_duration_int + 10, 10)
+        )  # Major grid every 10 days
+        ax_resource.set_xticks(
+            range(0, project_duration_int + 10, 1), minor=True
+        )  # Minor grid every day
+        ax_resource.grid(which="major", color="gray", linestyle="-", alpha=0.5)
+        ax_resource.grid(which="minor", color="lightgray", linestyle="-", alpha=0.2)
+
+        ax_resource.set_xlim(0, project_duration + 5)  # Add some padding
+
+        # Set y-axis limits to give room for the annotations
+        ax_resource.set_ylim(-0.5, len(all_resources) - 0.5)
+
+        # Add a legend for resource demand colors
+        from matplotlib.patches import Patch
+
+        legend_elements = [
+            Patch(
+                facecolor=self._get_demand_color(1),
+                edgecolor="black",
+                alpha=0.6,
+                label="1 Task",
+            ),
+            Patch(
+                facecolor=self._get_demand_color(2),
+                edgecolor="black",
+                alpha=0.6,
+                label="2 Tasks",
+            ),
+            Patch(
+                facecolor=self._get_demand_color(3),
+                edgecolor="black",
+                alpha=0.6,
+                label="3+ Tasks",
+            ),
+        ]
+        ax_resource.legend(handles=legend_elements, loc="upper right", ncol=3)
+
+        # Adjust layout
+        plt.tight_layout()
+
+        # Save or show the chart
+        if filename:
+            plt.savefig(filename, dpi=300, bbox_inches="tight")
+        plt.show()
+
+    def _calculate_resource_utilization(self):
+        """Calculate the daily demand for each resource throughout the project."""
+        # Find the latest project date
+        latest_date = max(task.end_date for task in self.tasks.values())
+        if self.project_buffer:
+            latest_date = latest_date + timedelta(days=self.project_buffer)
+
+        # Initialize a dictionary to hold resource utilization
+        # Format: {resource_name: {day_number: demand_count}}
+        resource_usage = {}
+
+        # Calculate the demand for each resource on each day
+        for task in self.tasks.values():
+            start_day = (task.start_date - self.start_date).days
+
+            # Process each day of the task duration
+            for day in range(start_day, start_day + task.duration):
+                # Handle resources whether it's a string or a list
+                resources_list = []
+                if isinstance(task.resources, str):
+                    # Case when resources is a single string (like "Magenta")
+                    resources_list = [task.resources]
+                elif isinstance(task.resources, list):
+                    # Case when resources is a list
+                    resources_list = task.resources
+
+                for resource in resources_list:
+                    # Initialize resource if not yet in dictionary
+                    if resource not in resource_usage:
+                        resource_usage[resource] = {}
+
+                    # Initialize day if not yet tracked for this resource
+                    if day not in resource_usage[resource]:
+                        resource_usage[resource][day] = 0
+
+                    # Increment the demand count for this resource on this day
+                    resource_usage[resource][day] += 1
+
+        return resource_usage
+
+    def _get_demand_color(self, demand):
+        """Return a color based on resource demand level."""
+        if demand == 1:
+            return "#90EE90"  # Light green
+        elif demand == 2:
+            return "#FFEB3B"  # Yellow
+        else:  # 3 or more
+            return "#FF8A80"  # Light red/salmon
+
+
 def create_sample_project():
     # Define resources
-    resources = ["Developer A", "Developer B", "Tester", "Designer", "Manager"]
+    # resources = ["Developer A", "Developer B", "Tester", "Designer", "Manager"]
 
     # Define tasks - ID: Task(ID, Name, Duration, Dependencies, Resources)
     # tasks = {
