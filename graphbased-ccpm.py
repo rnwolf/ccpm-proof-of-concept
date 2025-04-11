@@ -911,44 +911,50 @@ class CCPMScheduler:
                 # Use solid color for completed tasks
                 alpha = 1.0
                 hatch = None
+                ax_gantt.barh(
+                    i, duration, left=start_day, color="green", alpha=alpha, hatch=hatch
+                )
             elif hasattr(task, "status") and task.status == "in_progress":
-                # In progress task - use actual start and status date + remaining
+                # In progress task - use actual start and split into completed and remaining
                 start_day = (task.actual_start_date - self.start_date).days
 
-                # For in-progress tasks, the completed portion runs from actual_start_date to status_date
+                # Calculate completed portion (from actual_start to status_date)
                 completed_duration = (status_date - task.actual_start_date).days
+                # Ensure completed_duration is not negative
+                completed_duration = max(0, completed_duration)
 
-                # The remaining duration comes directly from the task's remaining_duration
-                remaining_duration = task.remaining_duration
-
-                # Need to handle both portions separately
-                if status_date:
-                    # Show completed portion from actual_start_date to status_date
+                # Show completed portion
+                if completed_duration > 0:
                     ax_gantt.barh(
                         i, completed_duration, left=start_day, color="green", alpha=0.8
                     )
 
-                    # Show remaining portion from status_date forward
-                    start_remaining = (
-                        start_day + completed_duration
-                    )  # This is the status_date in days
-                    ax_gantt.barh(
-                        i,
-                        remaining_duration,
-                        left=start_remaining,
-                        color="lightblue",
-                        alpha=0.6,
-                        hatch="///",
-                    )
+                # Show remaining portion
+                remaining_duration = task.remaining_duration
+                start_remaining = (
+                    start_day + completed_duration
+                )  # This is status_date in days
 
-                    # For main color determination, use full duration
-                    duration = completed_duration + remaining_duration
-                else:
-                    # If no status_date, show original duration
-                    duration = completed_duration + remaining_duration
-                    # Use pattern for in-progress tasks
-                    alpha = 0.7
-                    hatch = "///"
+                ax_gantt.barh(
+                    i,
+                    remaining_duration,
+                    left=start_remaining,
+                    color=(
+                        "red"
+                        if task.id in self.critical_chain
+                        else "orange"
+                        if any(
+                            task.id in chain_info["chain"]
+                            for chain_info in self.feeding_chains
+                        )
+                        else "blue"
+                    ),
+                    alpha=0.6,
+                    hatch="///",
+                )
+
+                # For label positioning, use total duration
+                duration = completed_duration + remaining_duration
             elif hasattr(task, "new_start_date"):
                 # Task with updated schedule but not started
                 start_day = (task.new_start_date - self.start_date).days
@@ -960,6 +966,20 @@ class CCPMScheduler:
                 # Use lighter color for scheduled but not started tasks
                 alpha = 0.5
                 hatch = None
+
+                # Determine color based on task type
+                if task.id in self.critical_chain:
+                    color = "red"
+                elif any(
+                    task.id in chain_info["chain"] for chain_info in self.feeding_chains
+                ):
+                    color = "orange"
+                else:
+                    color = "blue"
+
+                ax_gantt.barh(
+                    i, duration, left=start_day, color=color, alpha=alpha, hatch=hatch
+                )
             else:
                 # Original planned schedule
                 start_day = (task.start_date - self.start_date).days
@@ -968,20 +988,16 @@ class CCPMScheduler:
                 alpha = 0.5
                 hatch = None
 
-            # Determine the color based on critical chain, feeding chain, etc.
-            if task.id in self.critical_chain:
-                color = "red"
-            elif any(
-                task.id in chain_info["chain"] for chain_info in self.feeding_chains
-            ):
-                color = "orange"
-            else:
-                color = "blue"
+                # Determine color based on task type
+                if task.id in self.critical_chain:
+                    color = "red"
+                elif any(
+                    task.id in chain_info["chain"] for chain_info in self.feeding_chains
+                ):
+                    color = "orange"
+                else:
+                    color = "blue"
 
-            # If not rendering progress separately, plot the full bar
-            if not (
-                hasattr(task, "status") and task.status == "in_progress" and status_date
-            ):
                 ax_gantt.barh(
                     i, duration, left=start_day, color=color, alpha=alpha, hatch=hatch
                 )
@@ -1013,20 +1029,6 @@ class CCPMScheduler:
                 ha="center",
                 va="center",
                 color="black",
-            )
-
-        # Add a vertical line for status date if available
-        if status_date:
-            status_day = (status_date - self.start_date).days
-            ax_gantt.axvline(x=status_day, color="green", linestyle="--", linewidth=2)
-            ax_gantt.text(
-                status_day,
-                -1,
-                "Status Date",
-                ha="center",
-                va="bottom",
-                rotation=90,
-                color="green",
             )
 
         # Plot buffers
@@ -1249,11 +1251,33 @@ class CCPMScheduler:
         plt.show()
 
     def _calculate_resource_utilization(self):
-        """Calculate the daily demand for each resource throughout the project."""
-        # Find the latest project date
-        latest_date = max(task.end_date for task in self.tasks.values())
-        if self.project_buffer:
-            latest_date = latest_date + timedelta(days=self.project_buffer)
+        """Calculate the daily demand for each resource throughout the project, accounting for task progress."""
+        # Find the latest project date considering both original and updated schedules
+        latest_date = self.start_date
+
+        for task in self.tasks.values():
+            # Check for actual end dates (completed tasks)
+            if hasattr(task, "actual_end_date") and task.actual_end_date > latest_date:
+                latest_date = task.actual_end_date
+
+            # Check for expected end dates (in-progress tasks)
+            elif hasattr(task, "new_end_date") and task.new_end_date > latest_date:
+                latest_date = task.new_end_date
+
+            # Check original end date
+            elif task.end_date > latest_date:
+                latest_date = task.end_date
+
+        # Include project buffer (if exists)
+        if (
+            hasattr(self, "project_buffer_id")
+            and self.project_buffer_id in self.buffers
+        ):
+            buffer = self.buffers[self.project_buffer_id]
+            if hasattr(buffer, "new_end_date") and buffer.new_end_date > latest_date:
+                latest_date = buffer.new_end_date
+            elif hasattr(buffer, "end_date") and buffer.end_date > latest_date:
+                latest_date = buffer.end_date
 
         # Initialize a dictionary to hold resource utilization
         # Format: {resource_name: {day_number: demand_count}}
@@ -1261,10 +1285,46 @@ class CCPMScheduler:
 
         # Calculate the demand for each resource on each day
         for task in self.tasks.values():
-            start_day = (task.start_date - self.start_date).days
+            # Determine the task's current timeline based on its status
+            if hasattr(task, "status") and task.status == "completed":
+                # Completed task - use actual dates
+                start_date = task.actual_start_date
+                end_date = task.actual_end_date
+                duration = (end_date - start_date).days
+            elif hasattr(task, "status") and task.status == "in_progress":
+                # In-progress task - use actual start and remaining duration
+                start_date = task.actual_start_date
+                current_date = getattr(self, "execution_date", datetime.now())
+
+                # From start to current date, the task was active
+                past_duration = (current_date - start_date).days
+
+                # For future resource usage, use the remaining duration
+                remaining_duration = task.remaining_duration
+
+                # Total duration for this task
+                duration = past_duration + remaining_duration
+
+                # End date is calculated from the status date
+                end_date = current_date + timedelta(days=remaining_duration)
+            elif hasattr(task, "new_start_date") and hasattr(task, "new_end_date"):
+                # Task with updated schedule
+                start_date = task.new_start_date
+                end_date = task.new_end_date
+                duration = (end_date - start_date).days
+            else:
+                # Original planned schedule
+                start_date = task.start_date
+                end_date = task.end_date
+                duration = task.duration
+
+            # Calculate the start and end days relative to project start
+            start_day = (start_date - self.start_date).days
 
             # Process each day of the task duration
-            for day in range(start_day, start_day + task.duration):
+            for day in range(
+                start_day, start_day + max(1, duration)
+            ):  # Ensure at least 1 day
                 # Handle resources whether it's a string or a list
                 resources_list = []
                 if isinstance(task.resources, str):
