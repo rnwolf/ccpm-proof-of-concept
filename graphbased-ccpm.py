@@ -911,45 +911,50 @@ class CCPMScheduler:
                 # Use solid color for completed tasks
                 alpha = 1.0
                 hatch = None
+                ax_gantt.barh(
+                    i, duration, left=start_day, color="green", alpha=alpha, hatch=hatch
+                )
             elif hasattr(task, "status") and task.status == "in_progress":
-                # In progress task - use actual start and current date + remaining
+                # In progress task - use actual start and split into completed and remaining
                 start_day = (task.actual_start_date - self.start_date).days
 
-                # Show both completed and remaining portions
-                original_duration = task.duration
-                remaining_duration = task.remaining_duration
-                completed_duration = original_duration - remaining_duration
+                # Calculate completed portion (from actual_start to status_date)
+                completed_duration = (status_date - task.actual_start_date).days
+                # Ensure completed_duration is not negative
+                completed_duration = max(0, completed_duration)
 
-                # Need to handle both portions separately
-                if status_date:
-                    # Define the completed portion end
-                    completed_end_day = (
-                        task.actual_start_date - self.start_date
-                    ).days + completed_duration
-                    # Show completed portion
+                # Show completed portion
+                if completed_duration > 0:
                     ax_gantt.barh(
                         i, completed_duration, left=start_day, color="green", alpha=0.8
                     )
 
-                    # Show remaining portion separately
-                    start_remaining = completed_end_day
-                    ax_gantt.barh(
-                        i,
-                        remaining_duration,
-                        left=start_remaining,
-                        color="lightblue",
-                        alpha=0.6,
-                        hatch="///",
-                    )
+                # Show remaining portion
+                remaining_duration = task.remaining_duration
+                start_remaining = (
+                    start_day + completed_duration
+                )  # This is status_date in days
 
-                    # For main color determination, use full duration
-                    duration = completed_duration + remaining_duration
-                else:
-                    # If no status date, show original duration
-                    duration = original_duration
-                    # Use pattern for in-progress tasks
-                    alpha = 0.7
-                    hatch = "///"
+                ax_gantt.barh(
+                    i,
+                    remaining_duration,
+                    left=start_remaining,
+                    color=(
+                        "red"
+                        if task.id in self.critical_chain
+                        else "orange"
+                        if any(
+                            task.id in chain_info["chain"]
+                            for chain_info in self.feeding_chains
+                        )
+                        else "blue"
+                    ),
+                    alpha=0.6,
+                    hatch="///",
+                )
+
+                # For label positioning, use total duration
+                duration = completed_duration + remaining_duration
             elif hasattr(task, "new_start_date"):
                 # Task with updated schedule but not started
                 start_day = (task.new_start_date - self.start_date).days
@@ -961,6 +966,20 @@ class CCPMScheduler:
                 # Use lighter color for scheduled but not started tasks
                 alpha = 0.5
                 hatch = None
+
+                # Determine color based on task type
+                if task.id in self.critical_chain:
+                    color = "red"
+                elif any(
+                    task.id in chain_info["chain"] for chain_info in self.feeding_chains
+                ):
+                    color = "orange"
+                else:
+                    color = "blue"
+
+                ax_gantt.barh(
+                    i, duration, left=start_day, color=color, alpha=alpha, hatch=hatch
+                )
             else:
                 # Original planned schedule
                 start_day = (task.start_date - self.start_date).days
@@ -969,20 +988,16 @@ class CCPMScheduler:
                 alpha = 0.5
                 hatch = None
 
-            # Determine the color based on critical chain, feeding chain, etc.
-            if task.id in self.critical_chain:
-                color = "red"
-            elif any(
-                task.id in chain_info["chain"] for chain_info in self.feeding_chains
-            ):
-                color = "orange"
-            else:
-                color = "blue"
+                # Determine color based on task type
+                if task.id in self.critical_chain:
+                    color = "red"
+                elif any(
+                    task.id in chain_info["chain"] for chain_info in self.feeding_chains
+                ):
+                    color = "orange"
+                else:
+                    color = "blue"
 
-            # If not rendering progress separately, plot the full bar
-            if not (
-                hasattr(task, "status") and task.status == "in_progress" and status_date
-            ):
                 ax_gantt.barh(
                     i, duration, left=start_day, color=color, alpha=alpha, hatch=hatch
                 )
@@ -1098,25 +1113,6 @@ class CCPMScheduler:
 
                 buffer_count += 1
 
-        # Add a vertical line for status date if available - EXPLICITLY ENSURE THIS HAPPENS
-        if status_date:
-            status_day = (status_date - self.start_date).days
-            # Draw it with higher zorder to ensure it's on top of other elements
-            ax_gantt.axvline(
-                x=status_day, color="green", linestyle="--", linewidth=2, zorder=5
-            )
-            # Add label with rotation for better visibility
-            ax_gantt.text(
-                status_day,
-                -0.5,
-                f"Status Date: {status_date.strftime('%Y-%m-%d')}",
-                ha="center",
-                va="bottom",
-                rotation=90,
-                color="green",
-                fontweight="bold",
-            )
-
         # Format the Gantt chart
         row_count = len(sorted_tasks) + buffer_count
         ax_gantt.set_yticks(range(row_count))
@@ -1160,6 +1156,13 @@ class CCPMScheduler:
             Patch(facecolor="red", alpha=0.6, hatch="///", label="Consumed Buffer"),
         ]
         ax_gantt.legend(handles=legend_elements, loc="upper right", ncol=2)
+
+        # Add vertical line for status date in gantt chart too
+        if status_date:
+            status_day = (status_date - self.start_date).days
+            ax_gantt.axvline(
+                x=status_day, color="green", linestyle="--", linewidth=2, zorder=5
+            )
 
         # Calculate resource utilization
         resource_usage = self._calculate_resource_utilization()
