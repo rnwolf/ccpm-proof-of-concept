@@ -912,27 +912,26 @@ class CCPMScheduler:
                 alpha = 1.0
                 hatch = None
             elif hasattr(task, "status") and task.status == "in_progress":
-                # In progress task - use actual start and current date + remaining
+                # In progress task - use actual start and status date + remaining
                 start_day = (task.actual_start_date - self.start_date).days
 
-                # Show both completed and remaining portions
-                original_duration = task.duration
+                # For in-progress tasks, the completed portion runs from actual_start_date to status_date
+                completed_duration = (status_date - task.actual_start_date).days
+
+                # The remaining duration comes directly from the task's remaining_duration
                 remaining_duration = task.remaining_duration
-                completed_duration = original_duration - remaining_duration
 
                 # Need to handle both portions separately
                 if status_date:
-                    # Define the completed portion end
-                    completed_end_day = (
-                        task.actual_start_date - self.start_date
-                    ).days + completed_duration
-                    # Show completed portion
+                    # Show completed portion from actual_start_date to status_date
                     ax_gantt.barh(
                         i, completed_duration, left=start_day, color="green", alpha=0.8
                     )
 
-                    # Show remaining portion separately
-                    start_remaining = completed_end_day
+                    # Show remaining portion from status_date forward
+                    start_remaining = (
+                        start_day + completed_duration
+                    )  # This is the status_date in days
                     ax_gantt.barh(
                         i,
                         remaining_duration,
@@ -945,8 +944,8 @@ class CCPMScheduler:
                     # For main color determination, use full duration
                     duration = completed_duration + remaining_duration
                 else:
-                    # If no status date, show original duration
-                    duration = original_duration
+                    # If no status_date, show original duration
+                    duration = completed_duration + remaining_duration
                     # Use pattern for in-progress tasks
                     alpha = 0.7
                     hatch = "///"
@@ -1475,7 +1474,7 @@ class CCPMScheduler:
 
             task = self.tasks[node]
 
-            # If the task is completed or in progress, keep its actual dates
+            # If the task is completed or in progress, handle actual dates
             if hasattr(task, "status") and task.status in ["completed", "in_progress"]:
                 # Task has started - use actual start date and remaining duration
                 if not hasattr(task, "remaining_duration"):
@@ -1485,6 +1484,16 @@ class CCPMScheduler:
                 if task.status == "completed":
                     if not hasattr(task, "actual_end_date"):
                         task.actual_end_date = status_date
+
+                    # Use the actual dates for new_start_date and new_end_date
+                    task.new_start_date = task.actual_start_date
+                    task.new_end_date = task.actual_end_date
+                else:
+                    # For in-progress tasks, calculate expected end date
+                    task.new_start_date = task.actual_start_date
+                    task.new_end_date = status_date + timedelta(
+                        days=task.remaining_duration
+                    )
             else:
                 # Task hasn't started yet - calculate based on predecessors
                 predecessors = list(self.task_graph.predecessors(node))
@@ -1523,11 +1532,9 @@ class CCPMScheduler:
                                 pred_end = status_date + timedelta(
                                     days=pred_task.remaining_duration
                                 )
-                            elif hasattr(pred_task, "new_start_date"):
+                            elif hasattr(pred_task, "new_end_date"):
                                 # Not started but rescheduled - use new dates
-                                pred_end = pred_task.new_start_date + timedelta(
-                                    days=pred_task.remaining_duration
-                                )
+                                pred_end = pred_task.new_end_date
                             else:
                                 # Not started or updated - use original schedule
                                 pred_end = pred_task.end_date
@@ -1610,7 +1617,13 @@ class CCPMScheduler:
                             succ_task.new_start_date = buffer.new_start_date
                             succ_task.new_end_date = (
                                 succ_task.new_start_date
-                                + timedelta(days=succ_task.remaining_duration)
+                                + timedelta(
+                                    days=getattr(
+                                        succ_task,
+                                        "remaining_duration",
+                                        succ_task.duration,
+                                    )
+                                )
                             )
                         else:
                             # Calculate how much buffer is consumed
@@ -1886,6 +1899,33 @@ class CCPMScheduler:
 
         return self.tasks, self.buffers if hasattr(self, "buffers") else None
 
+    # Add a new method to explicitly set the actual start date
+    def set_task_actual_start_date(self, task_id, actual_start_date):
+        """
+        Explicitly set the actual start date for a task.
+
+        Args:
+            task_id: The ID of the task to update
+            actual_start_date: The actual date when the task started
+        """
+        if task_id not in self.tasks:
+            raise ValueError(f"Task {task_id} not found in the project")
+
+        task = self.tasks[task_id]
+        task.actual_start_date = actual_start_date
+
+        # Mark the task as in progress if it wasn't already
+        if not hasattr(task, "status") or task.status not in [
+            "completed",
+            "in_progress",
+        ]:
+            task.status = "in_progress"
+            task.remaining_duration = (
+                task.duration
+            )  # Default to full duration remaining
+
+        return task
+
     def update_task_progress(self, task_id, remaining_duration, status_date=None):
         """
         Update task progress during execution phase.
@@ -1903,7 +1943,7 @@ class CCPMScheduler:
 
         task = self.tasks[task_id]
 
-        # Store the original remaining duration if not already tracking
+        # Store the original duration if not already tracking
         if not hasattr(task, "original_duration"):
             task.original_duration = task.duration
 
@@ -1928,10 +1968,17 @@ class CCPMScheduler:
             task.actual_end_date = status_date
         else:
             task.status = "in_progress"
+            # Update the expected end date based on status date and remaining duration
+            task.expected_end_date = status_date + timedelta(days=remaining_duration)
 
         # If this is the first update, set the actual start date
         if not hasattr(task, "actual_start_date"):
-            task.actual_start_date = status_date
+            # If status_date is after the scheduled start_date, assume the task started on its scheduled start date
+            if status_date > task.start_date:
+                task.actual_start_date = task.start_date
+            else:
+                # If status update is before the scheduled start, use the status date
+                task.actual_start_date = status_date
 
         # Recalculate the network to account for this change
         self.recalculate_network_from_progress(status_date)
@@ -2033,12 +2080,12 @@ def create_sample_project():
         f.write(report)
 
     # Set the execution date to today
-    current_date = datetime(2025, 4, 10)
+    current_date = datetime(2025, 4, 11)
     scheduler.set_execution_date(current_date)
 
     # Update task progress
-    scheduler.update_task_progress(1, 10)  # Task 1 is completed
-    scheduler.update_task_progress(4, 15)  # Task 2 has 5 days remaining
+    scheduler.update_task_progress(1, 10)
+    scheduler.update_task_progress(4, 15)
 
     # Generate reports
     report = scheduler.generate_execution_report()
