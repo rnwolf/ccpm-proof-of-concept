@@ -1,134 +1,67 @@
 CCPM Project Schedule Report
 ===========================
-Project Start Date: 2025-04-09
-Projected End Date: 2025-11-02
-Project Duration: 207 days
-Project Buffer: 74.0 days
+Project Start Date: 2025-04-01
+Projected End Date: 2025-07-30
+Project Duration: 120 days
+Project Buffer: 40.0 days
 
 Critical Chain Tasks:
 -------------------
-Task 1: A-1 - Duration: 10 days
-Task 2: A-2 - Duration: 20 days
-Task 3: A-3 - Duration: 30 days
-Task 4: A-4 - Duration: 20 days
-Task 5: A-5 - Duration: 40 days
-Task 6: A-6 - Duration: 28 days
-Task 16: Done - Duration: 0 days
+Task 1: T1.1 - Duration: 30 days
+Task 2: T1.2 - Duration: 20 days
+Task 3: T3 - Duration: 30 days
 
 Feeding Chains:
 --------------
 Feeding Chain 1:
-  Connects to Critical Task: 5 (A-5)
-  Feeding Buffer Size: 15 days
-  Tasks in Chain: 7 -> 8 -> 9
+  Connects to Critical Task: 3 (T3)
+  Feeding Buffer Size: 9 days
+  Tasks in Chain: 4 -> 5
   Task Details:
-    Task 7: B-2
-      Start: 2025-04-09, End: 2025-04-29
+    Task 4: T2.1
+      Start: 2025-04-01, End: 2025-04-21
       Duration: 20 days
-    Task 8: B-3
-      Start: 2025-04-29, End: 2025-05-19
-      Duration: 20 days
-    Task 9: B-4
-      Start: 2025-05-19, End: 2025-05-29
-      Duration: 10 days
-
-Feeding Chain 2:
-  Connects to Critical Task: 16 (Done)
-  Feeding Buffer Size: 27 days
-  Tasks in Chain: 10 -> 11 -> 12 -> 13
-  Task Details:
-    Task 10: C-3
-      Start: 2025-04-09, End: 2025-05-09
-      Duration: 30 days
-    Task 11: C-4
-      Start: 2025-05-09, End: 2025-05-29
-      Duration: 20 days
-    Task 12: C-5
-      Start: 2025-05-29, End: 2025-06-28
-      Duration: 30 days
-    Task 13: C-6
-      Start: 2025-06-28, End: 2025-07-08
+    Task 5: T2.2
+      Start: 2025-04-21, End: 2025-05-01
       Duration: 10 days
 
 
 Complete Task Schedule:
 ----------------------
-Task 1: A-1
-  Start: 2025-04-09, End: 2025-04-19
-  Duration: 10 days, Resources: M, a, g, e, n, t, a
+Task 1: T1.1
+  Start: 2025-04-01, End: 2025-05-01
+  Duration: 30 days, Resources: Red
   Type: Critical Chain
 
-Task 7: B-2
-  Start: 2025-04-09, End: 2025-04-29
-  Duration: 20 days, Resources: M, a, g, e, n, t, a
+Task 4: T2.1
+  Start: 2025-04-01, End: 2025-04-21
+  Duration: 20 days, Resources: Blue
   Type: Feeding Chain 1
 
-Task 10: C-3
-  Start: 2025-04-09, End: 2025-05-09
-  Duration: 30 days, Resources: B, l, u, e
-  Type: Feeding Chain 2
-
-Task 14: D-3
-  Start: 2025-04-09, End: 2025-05-19
-  Duration: 40 days, Resources: B, l, u, e
-  Type: Regular Task
-
-Task 2: A-2
-  Start: 2025-04-19, End: 2025-05-09
-  Duration: 20 days, Resources: B, l, a, c, k
-  Type: Critical Chain
-
-Task 8: B-3
-  Start: 2025-04-29, End: 2025-05-19
-  Duration: 20 days, Resources: B, l, u, e
+Task 5: T2.2
+  Start: 2025-04-21, End: 2025-05-01
+  Duration: 10 days, Resources: Green
   Type: Feeding Chain 1
 
-Task 3: A-3
-  Start: 2025-05-09, End: 2025-06-08
-  Duration: 30 days, Resources: G, r, e, e, n
+Task 2: T1.2
+  Start: 2025-05-01, End: 2025-05-21
+  Duration: 20 days, Resources: Green
   Type: Critical Chain
 
-Task 11: C-4
-  Start: 2025-05-09, End: 2025-05-29
-  Duration: 20 days, Resources: G, r, e, e, n
-  Type: Feeding Chain 2
-
-Task 9: B-4
-  Start: 2025-05-19, End: 2025-05-29
-  Duration: 10 days, Resources: R, e, d
-  Type: Feeding Chain 1
-
-Task 15: D-4
-  Start: 2025-05-19, End: 2025-05-29
-  Duration: 10 days, Resources: G, r, e, e, n
-  Type: Regular Task
-
-Task 12: C-5
-  Start: 2025-05-29, End: 2025-06-28
-  Duration: 30 days, Resources: R, e, d
-  Type: Feeding Chain 2
-
-Task 4: A-4
-  Start: 2025-06-08, End: 2025-06-28
-  Duration: 20 days, Resources: R, e, d
+Task 3: T3
+  Start: 2025-05-21, End: 2025-06-20
+  Duration: 30 days, Resources: Magenta
   Type: Critical Chain
 
-Task 5: A-5
-  Start: 2025-06-13, End: 2025-07-23
-  Duration: 40 days, Resources: M, a, g, e, n, t, a
-  Type: Critical Chain
 
-Task 13: C-6
-  Start: 2025-06-28, End: 2025-07-08
-  Duration: 10 days, Resources: M, a, g, e, n, t, a
-  Type: Feeding Chain 2
+Buffer Information:
+------------------
+Buffer PB3: Project Buffer
+  Type: project
+  Size: 40.0 days
+  Start: 2025-06-20, End: 2025-07-30
 
-Task 6: A-6
-  Start: 2025-07-23, End: 2025-08-20
-  Duration: 28 days, Resources: R, e, d
-  Type: Critical Chain
-
-Task 16: Done
-  Start: 2025-08-04, End: 2025-08-04
-  Duration: 0 days, Resources: B, l, a, c, k
-  Type: Critical Chain
+Buffer FB5-3: Feeding Buffer (5→3)
+  Type: feeding
+  Size: 9 days
+  Start: 2025-05-01, End: 2025-05-10
