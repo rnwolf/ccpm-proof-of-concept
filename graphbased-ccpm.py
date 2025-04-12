@@ -1851,55 +1851,85 @@ class CCPMScheduler:
                 # Use solid color for completed tasks
                 ax_gantt.barh(i, duration, left=start_day, color="green", alpha=1.0)
             elif hasattr(task, "status") and task.status == "in_progress":
-                # FIXED: For in-progress tasks, use the task's last update date, not the current status date
+                # For in-progress tasks, we need to handle actual vs. planned correctly
+
+                # Get actual start date and the last update date
                 start_day = (task.actual_start_date - self.start_date).days
 
-                # IMPORTANT FIX: Get the last update date for this task
+                # Get the last update date for this task
                 last_update_date = None
                 if hasattr(task, "progress_history") and task.progress_history:
                     # Get the most recent update date from the task's history
                     last_update_date = task.progress_history[-1]["date"]
                 else:
-                    # If no history, use the actual start date
-                    last_update_date = task.actual_start_date
+                    # If no history, use the status date
+                    last_update_date = status_date
 
-                # Calculate completed portion (from actual_start to LAST UPDATE date, not status_date)
-                completed_duration = (last_update_date - task.actual_start_date).days
-                # Ensure completed_duration is not negative
-                completed_duration = max(0, completed_duration)
+                # Calculate elapsed calendar time
+                elapsed_calendar_days = (last_update_date - task.actual_start_date).days
+                elapsed_calendar_days = max(
+                    1, elapsed_calendar_days
+                )  # Ensure at least 1 day
 
-                # Show completed portion
-                if completed_duration > 0:
+                # Get remaining duration
+                remaining_duration = task.remaining_duration
+
+                # UPDATED CALCULATION: Calculate progress as elapsed time / (elapsed time + remaining time)
+                # This accounts for revised understanding of total effort needed
+                total_actual_duration = elapsed_calendar_days + remaining_duration
+                progress_pct = (elapsed_calendar_days / total_actual_duration) * 100
+
+                # Show the completed portion based on actual calendar time
+                if elapsed_calendar_days > 0:
+                    # Show the completed portion in green
                     ax_gantt.barh(
-                        i, completed_duration, left=start_day, color="green", alpha=0.8
+                        i,
+                        elapsed_calendar_days,
+                        left=start_day,
+                        color="green",
+                        alpha=0.8,
                     )
 
-                # Show remaining portion
-                remaining_duration = task.remaining_duration
-                start_remaining = (
-                    start_day + completed_duration
-                )  # This is last_update_date in days
+                    # Add progress text to show updated completion percentage
+                    ax_gantt.text(
+                        start_day + elapsed_calendar_days / 2,
+                        i,
+                        f"{progress_pct:.0f}%",
+                        ha="center",
+                        va="center",
+                        color="black",
+                        fontweight="bold",
+                        fontsize=8,
+                    )
 
-                ax_gantt.barh(
-                    i,
-                    remaining_duration,
-                    left=start_remaining,
-                    color=(
-                        "red"
-                        if task.id in self.critical_chain
-                        else "orange"
-                        if any(
-                            task.id in chain_info["chain"]
-                            for chain_info in self.feeding_chains
-                        )
-                        else "blue"
-                    ),
-                    alpha=0.6,
-                    hatch="///",
-                )
+                # Then show the remaining portion
+                if remaining_duration > 0:
+                    # Start remaining portion after the elapsed calendar time
+                    start_remaining = start_day + elapsed_calendar_days
 
-                # For label positioning, use total duration
-                duration = completed_duration + remaining_duration
+                    # Choose color based on task type
+                    if task.id in self.critical_chain:
+                        color = "red"
+                    elif any(
+                        task.id in chain_info["chain"]
+                        for chain_info in self.feeding_chains
+                    ):
+                        color = "orange"
+                    else:
+                        color = "blue"
+
+                    # Draw the remaining portion
+                    ax_gantt.barh(
+                        i,
+                        remaining_duration,
+                        left=start_remaining,
+                        color=color,
+                        alpha=0.6,
+                        hatch="///",
+                    )
+
+                # For label positioning, use total visible duration
+                duration = elapsed_calendar_days + remaining_duration
             elif hasattr(task, "new_start_date"):
                 # Task with updated schedule but not started
                 start_day = (task.new_start_date - self.start_date).days
@@ -2487,12 +2517,7 @@ class CCPMScheduler:
 
     def update_task_progress(self, task_id, remaining_duration, status_date=None):
         """
-        Update task progress during execution phase.
-
-        Args:
-            task_id: The ID of the task to update
-            remaining_duration: The remaining duration in days (0 means task is complete)
-            status_date: The date of this status update (defaults to execution_date)
+        Update task progress during execution phase with improved progress tracking.
         """
         # Default to execution_date
         if status_date is None:
@@ -2538,37 +2563,58 @@ class CCPMScheduler:
 
         # If this is the first update, set the actual start date
         if not hasattr(task, "actual_start_date"):
-            # If status_date is after the scheduled start_date, assume the task started on its scheduled start date
-            if hasattr(task, "start_date") and status_date > task.start_date:
+            # For first update, if status_date is after scheduled start,
+            # use the scheduled start date
+            if hasattr(task, "start_date") and status_date >= task.start_date:
                 task.actual_start_date = task.start_date
             else:
-                # If status update is before the scheduled start, use the status date
+                # Only use status_date if it's before the scheduled start
                 task.actual_start_date = status_date
+
+            # Store original duration for reference
+            task.original_duration = task.duration
 
             # Also set new_start_date
             task.new_start_date = task.actual_start_date
+
+        # Update the remaining duration
+        task.remaining_duration = remaining_duration
+
+        # Calculate elapsed calendar days
+        elapsed_days = (status_date - task.actual_start_date).days
+
+        # UPDATED: Calculate new progress metrics
+        # Total actual duration = elapsed days + remaining days
+        total_actual_duration = elapsed_days + remaining_duration
+
+        # Progress percentage based on elapsed vs total actual duration
+        progress_percentage = (
+            (elapsed_days / total_actual_duration) * 100
+            if total_actual_duration > 0
+            else 0
+        )
 
         # Keep history of updates for this task if not already doing so
         if not hasattr(task, "progress_history"):
             task.progress_history = []
 
-        # Add to history
+        # Add to history with updated progress calculations
         task.progress_history.append(
-            {"date": status_date, "remaining": remaining_duration}
+            {
+                "date": status_date,
+                "remaining": remaining_duration,
+                "elapsed_days": elapsed_days,
+                "total_actual_duration": total_actual_duration,
+                "progress_percentage": progress_percentage,
+            }
         )
 
         # Update task status
         if remaining_duration <= 0:
             # Task is now complete
             task.status = "completed"
-
-            # CRITICAL FIX: Set the actual_end_date to the status_date parameter, not today
             task.actual_end_date = status_date
-
-            # Make sure the task duration is updated to reflect actual duration
-            task.actual_duration = (task.actual_end_date - task.actual_start_date).days
-
-            # Also update new_end_date for consistency
+            task.actual_duration = elapsed_days
             task.new_end_date = status_date
         else:
             # Task is in progress
@@ -2576,22 +2622,15 @@ class CCPMScheduler:
 
             # Update the expected end date based on status date and remaining duration
             task.expected_end_date = status_date + timedelta(days=remaining_duration)
-
-            # Update new_end_date for consistency
             task.new_end_date = task.expected_end_date
 
-        # Print information about the task after update
-        print(f"AFTER UPDATE - Task {task_id}: {task.name}")
+        # Print debug information about the update
+        print(f"Updated Task {task_id}: {task.name}")
         print(f"  Status: {task.status}")
-        print(f"  Actual start: {task.actual_start_date.strftime('%Y-%m-%d')}")
-        if task.status == "completed":
-            print(f"  Actual end: {task.actual_end_date.strftime('%Y-%m-%d')}")
-            print(
-                f"  Actual duration: {(task.actual_end_date - task.actual_start_date).days} days"
-            )
-        else:
-            print(f"  Remaining: {task.remaining_duration} days")
-            print(f"  Expected end: {task.expected_end_date.strftime('%Y-%m-%d')}")
+        print(f"  Elapsed days: {elapsed_days}")
+        print(f"  Remaining duration: {remaining_duration}")
+        print(f"  Total actual duration: {total_actual_duration}")
+        print(f"  Progress: {progress_percentage:.1f}%")
 
         # Create a set with this task ID as the only directly updated task
         directly_updated_tasks = {task_id}

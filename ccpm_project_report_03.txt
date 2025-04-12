@@ -59,7 +59,7 @@ Task 1: T1.1
     new_end_date: 2025-04-21
     new_start_date: 2025-04-01
     original_duration: 30
-    progress_history: [{'date': datetime.datetime(2025, 4, 11, 0, 0), 'remaining': 10}, {'date': datetime.datetime(2025, 4, 21, 0, 0), 'remaining': 0}]
+    progress_history: [{'date': datetime.datetime(2025, 4, 11, 0, 0), 'remaining': 10, 'elapsed_days': 10, 'total_actual_duration': 20, 'progress_percentage': 50.0}, {'date': datetime.datetime(2025, 4, 21, 0, 0), 'remaining': 0, 'elapsed_days': 20, 'total_actual_duration': 20, 'progress_percentage': 100.0}]
     remaining_duration: 0
     slack: 0
 
