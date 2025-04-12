@@ -829,416 +829,6 @@ class CCPMScheduler:
 
         return "\n".join(report)
 
-    def visualize_schedule(self, filename=None):
-        """Visualize the project schedule as a Gantt chart with resource utilization."""
-        import matplotlib.pyplot as plt
-        import matplotlib.gridspec as gridspec
-        from matplotlib.ticker import FuncFormatter
-        from matplotlib.patches import Patch
-
-        # Calculate the project duration for x-axis sizing
-        all_end_dates = []
-
-        # Include both original and updated end dates
-        for task in self.tasks.values():
-            all_end_dates.append(task.end_date)
-            if hasattr(task, "new_end_date"):
-                all_end_dates.append(task.new_end_date)
-            if hasattr(task, "actual_end_date"):
-                all_end_dates.append(task.actual_end_date)
-
-        # Include buffer end dates if they exist
-        if hasattr(self, "buffers"):
-            for buffer in self.buffers.values():
-                if hasattr(buffer, "end_date"):
-                    all_end_dates.append(buffer.end_date)
-                if hasattr(buffer, "new_end_date"):
-                    all_end_dates.append(buffer.new_end_date)
-
-        # Get current execution date if available
-        if hasattr(self, "execution_date"):
-            status_date = self.execution_date
-            all_end_dates.append(status_date)  # Ensure status date is considered
-        else:
-            status_date = None
-
-        last_end_date = max(all_end_dates) if all_end_dates else self.start_date
-        project_duration = (last_end_date - self.start_date).days
-
-        # Convert to integer to avoid the range() error
-        project_duration_int = int(project_duration)
-
-        # Create figure with GridSpec to have two subplots
-        fig = plt.figure(figsize=(14, 12))
-        gs = gridspec.GridSpec(
-            2, 1, height_ratios=[3, 1], hspace=0.3
-        )  # 3:1 ratio for Gantt:Resources with spacing
-
-        # Gantt chart subplot
-        ax_gantt = fig.add_subplot(gs[0])
-
-        # Sort tasks by start date
-        sorted_tasks = sorted(
-            self.tasks.values(),
-            key=lambda x: getattr(x, "new_start_date", x.start_date),
-        )
-
-        # Plot each task
-        for i, task in enumerate(sorted_tasks):
-            # Determine start and end days for the task
-            if hasattr(task, "status") and task.status == "completed":
-                # Completed task - use actual start and end
-                start_day = (task.actual_start_date - self.start_date).days
-                duration = (task.actual_end_date - task.actual_start_date).days
-                # Use solid color for completed tasks
-                alpha = 1.0
-                hatch = None
-                ax_gantt.barh(
-                    i, duration, left=start_day, color="green", alpha=alpha, hatch=hatch
-                )
-            elif hasattr(task, "status") and task.status == "in_progress":
-                # In progress task - use actual start and split into completed and remaining
-                start_day = (task.actual_start_date - self.start_date).days
-
-                # Calculate completed portion (from actual_start to status_date)
-                completed_duration = (status_date - task.actual_start_date).days
-                # Ensure completed_duration is not negative
-                completed_duration = max(0, completed_duration)
-
-                # Show completed portion
-                if completed_duration > 0:
-                    ax_gantt.barh(
-                        i, completed_duration, left=start_day, color="green", alpha=0.8
-                    )
-
-                # Show remaining portion
-                remaining_duration = task.remaining_duration
-                start_remaining = (
-                    start_day + completed_duration
-                )  # This is status_date in days
-
-                ax_gantt.barh(
-                    i,
-                    remaining_duration,
-                    left=start_remaining,
-                    color=(
-                        "red"
-                        if task.id in self.critical_chain
-                        else "orange"
-                        if any(
-                            task.id in chain_info["chain"]
-                            for chain_info in self.feeding_chains
-                        )
-                        else "blue"
-                    ),
-                    alpha=0.6,
-                    hatch="///",
-                )
-
-                # For label positioning, use total duration
-                duration = completed_duration + remaining_duration
-            elif hasattr(task, "new_start_date"):
-                # Task with updated schedule but not started
-                start_day = (task.new_start_date - self.start_date).days
-                duration = (
-                    task.remaining_duration
-                    if hasattr(task, "remaining_duration")
-                    else task.duration
-                )
-                # Use lighter color for scheduled but not started tasks
-                alpha = 0.5
-                hatch = None
-
-                # Determine color based on task type
-                if task.id in self.critical_chain:
-                    color = "red"
-                elif any(
-                    task.id in chain_info["chain"] for chain_info in self.feeding_chains
-                ):
-                    color = "orange"
-                else:
-                    color = "blue"
-
-                ax_gantt.barh(
-                    i, duration, left=start_day, color=color, alpha=alpha, hatch=hatch
-                )
-            else:
-                # Original planned schedule
-                start_day = (task.start_date - self.start_date).days
-                duration = task.duration
-                # Use transparent for original plan
-                alpha = 0.5
-                hatch = None
-
-                # Determine color based on task type
-                if task.id in self.critical_chain:
-                    color = "red"
-                elif any(
-                    task.id in chain_info["chain"] for chain_info in self.feeding_chains
-                ):
-                    color = "orange"
-                else:
-                    color = "blue"
-
-                ax_gantt.barh(
-                    i, duration, left=start_day, color=color, alpha=alpha, hatch=hatch
-                )
-
-            # Format the resource list
-            if isinstance(task.resources, str):
-                resource_str = task.resources
-            elif isinstance(task.resources, list):
-                resource_str = ", ".join(task.resources)
-            else:
-                resource_str = ""
-
-            # Add status indicator if available
-            status_str = ""
-            if hasattr(task, "status"):
-                if task.status == "completed":
-                    status_str = " [DONE]"
-                elif task.status == "in_progress":
-                    progress_pct = (
-                        (task.duration - task.remaining_duration) / task.duration * 100
-                    )
-                    status_str = f" [{progress_pct:.0f}%]"
-
-            # Add task name, ID, resources and status
-            ax_gantt.text(
-                start_day + duration / 2,
-                i,
-                f"{task.id}: {task.name} [{resource_str}]{status_str}",
-                ha="center",
-                va="center",
-                color="black",
-            )
-
-        # Plot buffers
-        buffer_count = 0
-        if hasattr(self, "buffers"):
-            for buffer_id, buffer in self.buffers.items():
-                if not hasattr(buffer, "start_date") and not hasattr(
-                    buffer, "new_start_date"
-                ):
-                    continue
-
-                # Determine buffer start and size based on execution status
-                if hasattr(buffer, "new_start_date"):
-                    # Updated buffer status
-                    start_day = (buffer.new_start_date - self.start_date).days
-                    remaining_size = getattr(buffer, "remaining_size", buffer.size)
-
-                    # Plot consumed buffer portion if partially consumed
-                    if remaining_size < buffer.size:
-                        consumed_size = buffer.size - remaining_size
-                        buffer_start_consumed = start_day - consumed_size
-
-                        # Plot consumed portion in red
-                        ax_gantt.barh(
-                            len(sorted_tasks) + buffer_count,
-                            consumed_size,
-                            left=buffer_start_consumed,
-                            color="red",
-                            alpha=0.6,
-                            hatch="///",
-                        )
-
-                        # Plot remaining portion
-                        ax_gantt.barh(
-                            len(sorted_tasks) + buffer_count,
-                            remaining_size,
-                            left=start_day,
-                            color="green"
-                            if buffer.buffer_type == "project"
-                            else "yellow",
-                            alpha=0.6,
-                        )
-                    else:
-                        # Full buffer remaining
-                        ax_gantt.barh(
-                            len(sorted_tasks) + buffer_count,
-                            buffer.size,
-                            left=start_day,
-                            color="green"
-                            if buffer.buffer_type == "project"
-                            else "yellow",
-                            alpha=0.6,
-                        )
-                else:
-                    # Original buffer plan
-                    start_day = (buffer.start_date - self.start_date).days
-                    ax_gantt.barh(
-                        len(sorted_tasks) + buffer_count,
-                        buffer.size,
-                        left=start_day,
-                        color="green" if buffer.buffer_type == "project" else "yellow",
-                        alpha=0.4,
-                    )
-
-                # Add buffer label
-                consumed_str = ""
-                if (
-                    hasattr(buffer, "remaining_size")
-                    and buffer.remaining_size < buffer.size
-                ):
-                    consumed = buffer.size - buffer.remaining_size
-                    consumed_str = f" (Used: {consumed}/{buffer.size})"
-
-                ax_gantt.text(
-                    start_day + buffer.size / 2,
-                    len(sorted_tasks) + buffer_count,
-                    f"{buffer.name}{consumed_str}",
-                    ha="center",
-                    va="center",
-                    color="black",
-                )
-
-                buffer_count += 1
-
-        # Format the Gantt chart
-        row_count = len(sorted_tasks) + buffer_count
-        ax_gantt.set_yticks(range(row_count))
-
-        # Create custom y-tick labels
-        yticklabels = []
-        for task in sorted_tasks:
-            yticklabels.append(task.name)
-
-        if hasattr(self, "buffers"):
-            for buffer_id, buffer in self.buffers.items():
-                if hasattr(buffer, "start_date") or hasattr(buffer, "new_start_date"):
-                    yticklabels.append(buffer.name)
-
-        formatter = FuncFormatter(
-            lambda x, _: yticklabels[int(x)] if 0 <= int(x) < len(yticklabels) else ""
-        )
-        ax_gantt.yaxis.set_major_formatter(formatter)
-
-        # Add title with status date if available
-        if status_date:
-            ax_gantt.set_title(
-                f"CCPM Project Schedule (Status as of {status_date.strftime('%Y-%m-%d')})"
-            )
-        else:
-            ax_gantt.set_title("CCPM Project Schedule (Baseline Plan)")
-
-        ax_gantt.grid(axis="x", alpha=0.3)
-
-        # Add legend for task status
-        legend_elements = [
-            Patch(facecolor="red", alpha=0.6, label="Critical Chain Task"),
-            Patch(facecolor="orange", alpha=0.6, label="Feeding Chain Task"),
-            Patch(facecolor="blue", alpha=0.6, label="Regular Task"),
-            Patch(facecolor="green", alpha=0.8, label="Completed Work"),
-            Patch(
-                facecolor="lightblue", alpha=0.6, hatch="///", label="Remaining Work"
-            ),
-            Patch(facecolor="yellow", alpha=0.6, label="Feeding Buffer"),
-            Patch(facecolor="green", alpha=0.6, label="Project Buffer"),
-            Patch(facecolor="red", alpha=0.6, hatch="///", label="Consumed Buffer"),
-        ]
-        ax_gantt.legend(handles=legend_elements, loc="upper right", ncol=2)
-
-        # Add vertical line for status date in gantt chart too
-        if status_date:
-            status_day = (status_date - self.start_date).days
-            ax_gantt.axvline(
-                x=status_day, color="green", linestyle="--", linewidth=2, zorder=5
-            )
-
-        # Calculate resource utilization
-        resource_usage = self._calculate_resource_utilization()
-
-        # Resource utilization subplot
-        ax_resource = fig.add_subplot(gs[1], sharex=ax_gantt)
-
-        # Use the defined resources from the scheduler
-        all_resources = self.resources
-
-        # Plot resource utilization
-        for i, resource in enumerate(all_resources):
-            usage = resource_usage.get(resource, {})
-            days = list(usage.keys())
-            demands = [usage[day] for day in days]
-
-            # For each day with demand, place a text annotation
-            for day, demand in zip(days, demands):
-                if demand > 0:
-                    ax_resource.text(
-                        day,
-                        i,
-                        str(demand),
-                        ha="center",
-                        va="center",
-                        fontweight="bold",
-                        bbox=dict(
-                            boxstyle="round,pad=0.3",
-                            fc=self._get_demand_color(demand),
-                            ec="black",
-                            alpha=0.6,
-                        ),
-                    )
-
-        # Format the resource chart
-        ax_resource.set_xlabel("Days from project start")
-        ax_resource.set_ylabel("Resources")
-        ax_resource.set_title("Resource Utilization")
-        ax_resource.set_yticks(range(len(all_resources)))
-        ax_resource.set_yticklabels(all_resources)
-
-        # Create grid aligned with days - Make sure to use integers for range()
-        ax_resource.set_xticks(
-            range(0, project_duration_int + 10, 10)
-        )  # Major grid every 10 days
-        ax_resource.set_xticks(
-            range(0, project_duration_int + 10, 1), minor=True
-        )  # Minor grid every day
-        ax_resource.grid(which="major", color="gray", linestyle="-", alpha=0.5)
-        ax_resource.grid(which="minor", color="lightgray", linestyle="-", alpha=0.2)
-
-        ax_resource.set_xlim(0, project_duration_int + 5)  # Add some padding
-
-        # Set y-axis limits to give room for the annotations
-        ax_resource.set_ylim(-0.5, len(all_resources) - 0.5)
-
-        # Add a legend for resource demand colors
-        legend_elements = [
-            Patch(
-                facecolor=self._get_demand_color(1),
-                edgecolor="black",
-                alpha=0.6,
-                label="1 Task",
-            ),
-            Patch(
-                facecolor=self._get_demand_color(2),
-                edgecolor="black",
-                alpha=0.6,
-                label="2 Tasks",
-            ),
-            Patch(
-                facecolor=self._get_demand_color(3),
-                edgecolor="black",
-                alpha=0.6,
-                label="3+ Tasks",
-            ),
-        ]
-        ax_resource.legend(handles=legend_elements, loc="upper right", ncol=3)
-
-        # Add vertical line for status date in resource chart too
-        if status_date:
-            status_day = (status_date - self.start_date).days
-            ax_resource.axvline(
-                x=status_day, color="green", linestyle="--", linewidth=2, zorder=5
-            )
-
-        # Adjust layout
-        plt.tight_layout()
-
-        # Save or show the chart
-        if filename:
-            plt.savefig(filename, dpi=300, bbox_inches="tight")
-        plt.show()
-
     def _calculate_resource_utilization(self):
         """Calculate the daily demand for each resource throughout the project, accounting for task progress."""
         # Find the latest project date considering both original and updated schedules
@@ -1770,65 +1360,6 @@ class CCPMScheduler:
 
         return task
 
-    def update_task_progress(self, task_id, remaining_duration, status_date=None):
-        """
-        Update task progress during execution phase.
-
-        Args:
-            task_id: The ID of the task to update
-            remaining_duration: The remaining duration in days
-            status_date: The date of this status update (defaults to today)
-        """
-        if status_date is None:
-            status_date = datetime.now()
-
-        if task_id not in self.tasks:
-            raise ValueError(f"Task {task_id} not found in the project")
-
-        task = self.tasks[task_id]
-
-        # Store the original duration if not already tracking
-        if not hasattr(task, "original_duration"):
-            task.original_duration = task.duration
-
-        # Store the previous remaining duration
-        previous_remaining = getattr(task, "remaining_duration", task.duration)
-
-        # Update the remaining duration
-        task.remaining_duration = remaining_duration
-
-        # Keep history of updates for this task if not already doing so
-        if not hasattr(task, "progress_history"):
-            task.progress_history = []
-
-        # Add to history
-        task.progress_history.append(
-            {"date": status_date, "remaining": remaining_duration}
-        )
-
-        # Update task status
-        if remaining_duration <= 0:
-            task.status = "completed"
-            task.actual_end_date = status_date
-        else:
-            task.status = "in_progress"
-            # Update the expected end date based on status date and remaining duration
-            task.expected_end_date = status_date + timedelta(days=remaining_duration)
-
-        # If this is the first update, set the actual start date
-        if not hasattr(task, "actual_start_date"):
-            # If status_date is after the scheduled start_date, assume the task started on its scheduled start date
-            if status_date > task.start_date:
-                task.actual_start_date = task.start_date
-            else:
-                # If status update is before the scheduled start, use the status date
-                task.actual_start_date = status_date
-
-        # Recalculate the network to account for this change
-        self.recalculate_network_from_progress(status_date)
-
-        return task
-
     def recalculate_network_from_progress(self, status_date):
         """
         Recalculate the entire network schedule based on task progress.
@@ -2258,6 +1789,883 @@ class CCPMScheduler:
                         days=getattr(task, "remaining_duration", task.duration)
                     )
 
+    def update_task_progress(self, task_id, remaining_duration, status_date=None):
+        """
+        Update task progress during execution phase.
+        Enhanced to ensure resource leveling and proper buffer positioning.
+
+        Args:
+            task_id: The ID of the task to update
+            remaining_duration: The remaining duration in days
+            status_date: The date of this status update (defaults to today)
+        """
+        if status_date is None:
+            status_date = datetime.now()
+
+        if task_id not in self.tasks:
+            raise ValueError(f"Task {task_id} not found in the project")
+
+        task = self.tasks[task_id]
+
+        # Store the original duration if not already tracking
+        if not hasattr(task, "original_duration"):
+            task.original_duration = task.duration
+
+        # Store the previous remaining duration
+        previous_remaining = getattr(task, "remaining_duration", task.duration)
+
+        # Update the remaining duration
+        task.remaining_duration = remaining_duration
+
+        # Keep history of updates for this task if not already doing so
+        if not hasattr(task, "progress_history"):
+            task.progress_history = []
+
+        # Add to history
+        task.progress_history.append(
+            {"date": status_date, "remaining": remaining_duration}
+        )
+
+        # Update task status
+        if remaining_duration <= 0:
+            task.status = "completed"
+            task.actual_end_date = status_date
+        else:
+            task.status = "in_progress"
+            # Update the expected end date based on status date and remaining duration
+            task.expected_end_date = status_date + timedelta(days=remaining_duration)
+
+        # If this is the first update, set the actual start date
+        if not hasattr(task, "actual_start_date"):
+            # If status_date is after the scheduled start_date, assume the task started on its scheduled start date
+            if status_date > task.start_date:
+                task.actual_start_date = task.start_date
+            else:
+                # If status update is before the scheduled start, use the status date
+                task.actual_start_date = status_date
+
+        # Recalculate the network to account for this change
+        self.recalculate_network_from_progress(status_date)
+
+        # Explicitly call resource leveling after updating progress
+        self._apply_resource_leveling_in_execution(status_date)
+
+        # Explicitly update feeding buffer positions to ensure ALAP positioning
+        self._update_feeding_buffer_positions(status_date)
+
+        return task
+
+    def _apply_resource_leveling_in_execution(self, status_date):
+        """
+        Apply resource leveling to tasks during execution phase.
+        This version ensures proper handling of resource conflicts and maintains critical chain relationships.
+        """
+        # Identify tasks that haven't started yet
+        not_started_tasks = []
+        for task_id, task in self.tasks.items():
+            if not hasattr(task, "status") or task.status not in [
+                "completed",
+                "in_progress",
+            ]:
+                not_started_tasks.append(task_id)
+
+        if not not_started_tasks:
+            return  # No tasks to level
+
+        # Create dictionary to track resource usage over time
+        resource_usage = {}  # Format: {resource: {day: count}}
+
+        # First, add resource usage for completed and in-progress tasks
+        for task_id, task in self.tasks.items():
+            if hasattr(task, "status") and task.status in ["completed", "in_progress"]:
+                # Get task timeline
+                if task.status == "completed":
+                    start_day = (task.actual_start_date - self.start_date).days
+                    end_day = (task.actual_end_date - self.start_date).days
+                else:  # in_progress
+                    start_day = (task.actual_start_date - self.start_date).days
+                    end_day = (
+                        status_date - self.start_date
+                    ).days + task.remaining_duration
+
+                # Add resource usage for each day
+                for day in range(start_day, int(end_day) + 1):
+                    # Extract resources (handle both string and list formats)
+                    resources_list = []
+                    if isinstance(task.resources, str):
+                        resources_list = [task.resources]
+                    elif isinstance(task.resources, list):
+                        resources_list = task.resources
+
+                    # Update resource usage
+                    for resource in resources_list:
+                        if resource not in resource_usage:
+                            resource_usage[resource] = {}
+                        if day not in resource_usage[resource]:
+                            resource_usage[resource][day] = 0
+                        resource_usage[resource][day] += 1
+
+        # Build dependency map to track which tasks need to be scheduled first
+        dependency_map = {}
+        for task_id in not_started_tasks:
+            # Get direct successors in the task graph
+            successors = list(self.task_graph.successors(task_id))
+            task_successors = [s for s in successors if s in self.tasks]
+
+            # Record which tasks depend on this one
+            for succ_id in task_successors:
+                if succ_id not in dependency_map:
+                    dependency_map[succ_id] = []
+                dependency_map[succ_id].append(task_id)
+
+        # Sort remaining tasks by priority (critical chain first)
+        priority_order = []
+        # First critical chain tasks
+        critical_chain_tasks = [
+            t for t in not_started_tasks if t in self.critical_chain
+        ]
+        # Order critical chain tasks by their position in the chain
+        if critical_chain_tasks:
+            critical_chain_order = [
+                t for t in self.critical_chain if t in critical_chain_tasks
+            ]
+            priority_order.extend(critical_chain_order)
+
+        # Then feeding chain tasks
+        for task_id in not_started_tasks:
+            if task_id not in priority_order:
+                for chain_info in self.feeding_chains:
+                    if task_id in chain_info["chain"]:
+                        priority_order.append(task_id)
+                        break
+
+        # Then remaining tasks
+        for task_id in not_started_tasks:
+            if task_id not in priority_order:
+                priority_order.append(task_id)
+
+        # Schedule each remaining task, respecting resource constraints and dependencies
+        for task_id in priority_order:
+            task = self.tasks[task_id]
+
+            # Find earliest possible start date based on predecessors
+            earliest_start_day = (
+                status_date - self.start_date
+            ).days  # Default to status date
+
+            for pred_id in task.dependencies:
+                pred_task = self.tasks[pred_id]
+
+                # Calculate predecessor end day
+                if hasattr(pred_task, "status") and pred_task.status == "completed":
+                    pred_end_day = (pred_task.actual_end_date - self.start_date).days
+                elif hasattr(pred_task, "status") and pred_task.status == "in_progress":
+                    pred_end_day = (
+                        status_date - self.start_date
+                    ).days + pred_task.remaining_duration
+                elif hasattr(pred_task, "new_end_date"):
+                    pred_end_day = (pred_task.new_end_date - self.start_date).days
+                else:
+                    pred_end_day = (pred_task.end_date - self.start_date).days
+
+                earliest_start_day = max(earliest_start_day, int(pred_end_day))
+
+            # Determine resource requirements
+            resources_list = []
+            if isinstance(task.resources, str):
+                resources_list = [task.resources]
+            elif isinstance(task.resources, list):
+                resources_list = task.resources
+
+            # Check if this is a critical chain task
+            is_critical = task_id in self.critical_chain
+
+            # Try to schedule task as early as possible without resource conflicts
+            start_day = earliest_start_day
+            task_duration = getattr(task, "remaining_duration", task.duration)
+
+            # For critical chain tasks, we prioritize schedule over resource leveling
+            if is_critical:
+                # Critical tasks start as early as possible based on dependencies
+                pass
+            else:
+                # For non-critical tasks, we look for the earliest slot without resource conflicts
+                while True:
+                    resource_conflict = False
+
+                    # Check for resource conflicts over the task's duration
+                    for day in range(start_day, start_day + int(task_duration)):
+                        for resource in resources_list:
+                            if (
+                                resource in resource_usage
+                                and day in resource_usage[resource]
+                            ):
+                                if (
+                                    resource_usage[resource][day] >= 1
+                                ):  # Resource already in use
+                                    resource_conflict = True
+                                    break
+                        if resource_conflict:
+                            break
+
+                    if not resource_conflict:
+                        break  # Found a viable start day
+
+                    # Try the next day
+                    start_day += 1
+
+            # Update task schedule
+            task.new_start_date = self.start_date + timedelta(days=start_day)
+            task.new_end_date = task.new_start_date + timedelta(days=task_duration)
+
+            # Update resource usage for this task
+            for day in range(start_day, start_day + int(task_duration)):
+                for resource in resources_list:
+                    if resource not in resource_usage:
+                        resource_usage[resource] = {}
+                    if day not in resource_usage[resource]:
+                        resource_usage[resource][day] = 0
+                    resource_usage[resource][day] += 1
+
+            # Record resource usage for visualization
+            self.resource_usage = resource_usage
+
+    def _update_feeding_buffer_positions(self, status_date):
+        """
+        Explicitly update feeding buffer positions to ensure they are
+        positioned ALAP (As Late As Possible) before their protected tasks.
+        Ensures feeding chains properly push critical tasks through buffers.
+        """
+        if not hasattr(self, "buffers"):
+            return
+
+        # First, build a map of which critical task each feeding buffer protects
+        buffer_critical_map = {}  # Maps buffer_id to critical_task_id
+
+        for buffer_id, buffer in self.buffers.items():
+            if buffer.buffer_type != "feeding":
+                continue
+
+            successors = list(self.task_graph.successors(buffer_id))
+            if not successors:
+                continue
+
+            # The successor should be a critical chain task
+            critical_task_id = successors[0]
+            buffer_critical_map[buffer_id] = critical_task_id
+
+        # Now process feeding buffers
+        for buffer_id, buffer in self.buffers.items():
+            if buffer.buffer_type != "feeding":
+                continue
+
+            # Get the predecessor and successor tasks
+            predecessors = list(self.task_graph.predecessors(buffer_id))
+
+            if not predecessors or buffer_id not in buffer_critical_map:
+                continue
+
+            pred_id = predecessors[0]  # Last task in feeding chain
+            succ_id = buffer_critical_map[buffer_id]  # Critical chain task
+
+            if pred_id not in self.tasks or succ_id not in self.tasks:
+                continue
+
+            pred_task = self.tasks[pred_id]
+            succ_task = self.tasks[succ_id]
+
+            # Calculate feeding chain end time
+            if hasattr(pred_task, "status") and pred_task.status == "completed":
+                feeding_end = pred_task.actual_end_date
+            elif hasattr(pred_task, "status") and pred_task.status == "in_progress":
+                feeding_end = status_date + timedelta(days=pred_task.remaining_duration)
+            elif hasattr(pred_task, "new_end_date"):
+                feeding_end = pred_task.new_end_date
+            else:
+                feeding_end = pred_task.end_date
+
+            # Check if we need to delay the critical task
+            if hasattr(succ_task, "status") and succ_task.status in [
+                "completed",
+                "in_progress",
+            ]:
+                # Critical task has already started - buffer is fully consumed
+                critical_start = succ_task.actual_start_date
+                buffer.remaining_size = 0
+
+                # Position buffer right before critical task
+                buffer.new_end_date = critical_start
+                buffer.new_start_date = buffer.new_end_date - timedelta(
+                    days=buffer.size
+                )
+            else:
+                # Critical task hasn't started yet
+
+                # Calculate when buffer should start based on feeding chain
+                buffer_start = feeding_end
+
+                # Calculate when buffer should end (buffer size days later)
+                buffer_end = buffer_start + timedelta(days=buffer.size)
+
+                # This becomes the new start date for the critical task
+                new_critical_start = buffer_end
+
+                # Update buffer position
+                buffer.new_start_date = buffer_start
+                buffer.new_end_date = buffer_end
+
+                # Update critical task to start after buffer
+                succ_task.new_start_date = new_critical_start
+                succ_task.new_end_date = new_critical_start + timedelta(
+                    days=succ_task.duration
+                )
+
+                # Since we're adjusting the schedule, buffer isn't consumed yet
+                buffer.remaining_size = buffer.size
+
+            # Update buffer history
+            if not hasattr(buffer, "consumption_history"):
+                buffer.consumption_history = []
+
+            buffer.consumption_history.append(
+                {
+                    "date": status_date,
+                    "remaining": buffer.remaining_size,
+                    "position_start": buffer.new_start_date,
+                    "position_end": buffer.new_end_date,
+                }
+            )
+
+            # Propagate changes to downstream tasks in the critical chain
+            if not hasattr(succ_task, "status") or succ_task.status not in [
+                "completed",
+                "in_progress",
+            ]:
+                self._propagate_critical_chain_updates(succ_id, succ_task.new_end_date)
+
+    def _propagate_critical_chain_updates(self, task_id, end_date):
+        """
+        Propagate schedule changes through the critical chain.
+        Ensures downstream tasks are properly adjusted when predecessors change.
+        """
+        # Get successors of this task
+        successors = list(self.task_graph.successors(task_id))
+
+        for succ_id in successors:
+            # Skip buffers
+            if hasattr(self, "buffers") and succ_id in self.buffers:
+                continue
+
+            # Process only actual tasks
+            if succ_id not in self.tasks:
+                continue
+
+            succ_task = self.tasks[succ_id]
+
+            # Skip tasks that have already started
+            if hasattr(succ_task, "status") and succ_task.status in [
+                "completed",
+                "in_progress",
+            ]:
+                continue
+
+            # Update task start/end dates
+            succ_task.new_start_date = end_date
+            succ_task.new_end_date = succ_task.new_start_date + timedelta(
+                days=succ_task.duration
+            )
+
+            # Recursively update downstream tasks
+            self._propagate_critical_chain_updates(succ_id, succ_task.new_end_date)
+
+    def visualize_schedule(self, filename=None):
+        """Visualize the project schedule as a Gantt chart with resource utilization."""
+        import matplotlib.pyplot as plt
+        import matplotlib.gridspec as gridspec
+        from matplotlib.ticker import FuncFormatter
+        from matplotlib.patches import Patch
+
+        # Calculate the project duration for x-axis sizing
+        all_end_dates = []
+
+        # Include both original and updated end dates
+        for task in self.tasks.values():
+            all_end_dates.append(task.end_date)
+            if hasattr(task, "new_end_date"):
+                all_end_dates.append(task.new_end_date)
+            if hasattr(task, "actual_end_date"):
+                all_end_dates.append(task.actual_end_date)
+
+        # Include buffer end dates if they exist
+        if hasattr(self, "buffers"):
+            for buffer in self.buffers.values():
+                if hasattr(buffer, "end_date"):
+                    all_end_dates.append(buffer.end_date)
+                if hasattr(buffer, "new_end_date"):
+                    all_end_dates.append(buffer.new_end_date)
+
+        # Get current execution date if available
+        if hasattr(self, "execution_date"):
+            status_date = self.execution_date
+            all_end_dates.append(status_date)  # Ensure status date is considered
+        else:
+            status_date = None
+
+        last_end_date = max(all_end_dates) if all_end_dates else self.start_date
+        project_duration = (last_end_date - self.start_date).days
+
+        # Convert to integer to avoid the range() error
+        project_duration_int = int(project_duration) + 5  # Add some padding
+
+        # Create figure with GridSpec to have two subplots
+        fig = plt.figure(figsize=(14, 12))
+        gs = gridspec.GridSpec(
+            2, 1, height_ratios=[3, 1], hspace=0.3
+        )  # 3:1 ratio for Gantt:Resources with spacing
+
+        # Gantt chart subplot
+        ax_gantt = fig.add_subplot(gs[0])
+
+        # Sort tasks by start date
+        sorted_tasks = sorted(
+            self.tasks.values(),
+            key=lambda x: getattr(x, "new_start_date", x.start_date),
+        )
+
+        # Plot each task
+        for i, task in enumerate(sorted_tasks):
+            # Determine start and end days for the task
+            if hasattr(task, "status") and task.status == "completed":
+                # Completed task - use actual start and end
+                start_day = (task.actual_start_date - self.start_date).days
+                duration = (task.actual_end_date - task.actual_start_date).days
+                # Use solid color for completed tasks
+                alpha = 1.0
+                hatch = None
+                ax_gantt.barh(
+                    i, duration, left=start_day, color="green", alpha=alpha, hatch=hatch
+                )
+            elif hasattr(task, "status") and task.status == "in_progress":
+                # In progress task - use actual start and split into completed and remaining
+                start_day = (task.actual_start_date - self.start_date).days
+
+                # Calculate completed portion (from actual_start to status_date)
+                completed_duration = (status_date - task.actual_start_date).days
+                # Ensure completed_duration is not negative
+                completed_duration = max(0, completed_duration)
+
+                # Show completed portion
+                if completed_duration > 0:
+                    ax_gantt.barh(
+                        i, completed_duration, left=start_day, color="green", alpha=0.8
+                    )
+
+                # Show remaining portion
+                remaining_duration = task.remaining_duration
+                start_remaining = (
+                    start_day + completed_duration
+                )  # This is status_date in days
+
+                ax_gantt.barh(
+                    i,
+                    remaining_duration,
+                    left=start_remaining,
+                    color=(
+                        "red"
+                        if task.id in self.critical_chain
+                        else "orange"
+                        if any(
+                            task.id in chain_info["chain"]
+                            for chain_info in self.feeding_chains
+                        )
+                        else "blue"
+                    ),
+                    alpha=0.6,
+                    hatch="///",
+                )
+
+                # For label positioning, use total duration
+                duration = completed_duration + remaining_duration
+            elif hasattr(task, "new_start_date"):
+                # Task with updated schedule but not started
+                start_day = (task.new_start_date - self.start_date).days
+                duration = (
+                    task.remaining_duration
+                    if hasattr(task, "remaining_duration")
+                    else task.duration
+                )
+                # Use lighter color for scheduled but not started tasks
+                alpha = 0.5
+                hatch = None
+
+                # Determine color based on task type
+                if task.id in self.critical_chain:
+                    color = "red"
+                elif any(
+                    task.id in chain_info["chain"] for chain_info in self.feeding_chains
+                ):
+                    color = "orange"
+                else:
+                    color = "blue"
+
+                ax_gantt.barh(
+                    i, duration, left=start_day, color=color, alpha=alpha, hatch=hatch
+                )
+            else:
+                # Original planned schedule
+                start_day = (task.start_date - self.start_date).days
+                duration = task.duration
+                # Use transparent for original plan
+                alpha = 0.5
+                hatch = None
+
+                # Determine color based on task type
+                if task.id in self.critical_chain:
+                    color = "red"
+                elif any(
+                    task.id in chain_info["chain"] for chain_info in self.feeding_chains
+                ):
+                    color = "orange"
+                else:
+                    color = "blue"
+
+                ax_gantt.barh(
+                    i, duration, left=start_day, color=color, alpha=alpha, hatch=hatch
+                )
+
+            # Format the resource list
+            if isinstance(task.resources, str):
+                resource_str = task.resources
+            elif isinstance(task.resources, list):
+                resource_str = ", ".join(task.resources)
+            else:
+                resource_str = ""
+
+            # Add status indicator if available
+            status_str = ""
+            if hasattr(task, "status"):
+                if task.status == "completed":
+                    status_str = " [DONE]"
+                elif task.status == "in_progress":
+                    progress_pct = (
+                        (task.duration - task.remaining_duration) / task.duration * 100
+                    )
+                    status_str = f" [{progress_pct:.0f}%]"
+
+            # Add task name, ID, resources and status
+            ax_gantt.text(
+                start_day + duration / 2,
+                i,
+                f"{task.id}: {task.name} [{resource_str}]{status_str}",
+                ha="center",
+                va="center",
+                color="black",
+            )
+
+        # Plot buffers with improved positioning
+        buffer_count = 0
+        if hasattr(self, "buffers"):
+            for buffer_id, buffer in self.buffers.items():
+                # Check for updated or original buffer dates
+                has_dates = (
+                    hasattr(buffer, "new_start_date")
+                    and hasattr(buffer, "new_end_date")
+                ) or (hasattr(buffer, "start_date") and hasattr(buffer, "end_date"))
+
+                if not has_dates:
+                    continue
+
+                # Determine buffer start, end, and size based on execution status
+                if hasattr(buffer, "new_start_date") and hasattr(
+                    buffer, "new_end_date"
+                ):
+                    # Updated buffer status
+                    start_day = (buffer.new_start_date - self.start_date).days
+                    end_day = (buffer.new_end_date - self.start_date).days
+                    buffer_size = (buffer.new_end_date - buffer.new_start_date).days
+                    remaining_size = getattr(buffer, "remaining_size", buffer.size)
+
+                    # For feeding buffers with ALAP positioning
+                    if buffer.buffer_type == "feeding":
+                        # Plot consumed portion if partially consumed
+                        consumed_size = buffer.size - remaining_size
+                        if consumed_size > 0:
+                            # Calculate consumed portion position
+                            consumed_start = start_day
+                            # Draw consumed portion
+                            ax_gantt.barh(
+                                len(sorted_tasks) + buffer_count,
+                                consumed_size,
+                                left=consumed_start,
+                                color="red",
+                                alpha=0.6,
+                                hatch="///",
+                            )
+
+                        # Draw remaining portion (if any)
+                        if remaining_size > 0:
+                            # Remaining portion starts after consumed portion
+                            remaining_start = start_day + consumed_size
+                            ax_gantt.barh(
+                                len(sorted_tasks) + buffer_count,
+                                remaining_size,
+                                left=remaining_start,
+                                color="yellow",
+                                alpha=0.6,
+                            )
+                    else:
+                        # Project buffer handling (same as before)
+                        ax_gantt.barh(
+                            len(sorted_tasks) + buffer_count,
+                            buffer_size,
+                            left=start_day,
+                            color="green",
+                            alpha=0.6,
+                        )
+                else:
+                    # Original buffer plan
+                    start_day = (buffer.start_date - self.start_date).days
+                    buffer_size = buffer.size
+
+                    # Draw original buffer
+                    ax_gantt.barh(
+                        len(sorted_tasks) + buffer_count,
+                        buffer_size,
+                        left=start_day,
+                        color="green" if buffer.buffer_type == "project" else "yellow",
+                        alpha=0.4,
+                    )
+
+                # Add buffer label
+                consumed_str = ""
+                if (
+                    hasattr(buffer, "remaining_size")
+                    and buffer.remaining_size < buffer.size
+                ):
+                    consumed = buffer.size - buffer.remaining_size
+                    consumed_str = f" (Used: {consumed}/{buffer.size})"
+
+                ax_gantt.text(
+                    start_day + buffer_size / 2,
+                    len(sorted_tasks) + buffer_count,
+                    f"{buffer.name}{consumed_str}",
+                    ha="center",
+                    va="center",
+                    color="black",
+                )
+
+                buffer_count += 1
+
+        # Format the Gantt chart
+        row_count = len(sorted_tasks) + buffer_count
+        ax_gantt.set_yticks(range(row_count))
+
+        # Create custom y-tick labels
+        yticklabels = []
+        for task in sorted_tasks:
+            yticklabels.append(task.name)
+
+        if hasattr(self, "buffers"):
+            for buffer_id, buffer in self.buffers.items():
+                if hasattr(buffer, "start_date") or hasattr(buffer, "new_start_date"):
+                    yticklabels.append(buffer.name)
+
+        formatter = FuncFormatter(
+            lambda x, _: yticklabels[int(x)] if 0 <= int(x) < len(yticklabels) else ""
+        )
+        ax_gantt.yaxis.set_major_formatter(formatter)
+
+        # Add title with status date if available
+        if status_date:
+            ax_gantt.set_title(
+                f"CCPM Project Schedule (Status as of {status_date.strftime('%Y-%m-%d')})"
+            )
+        else:
+            ax_gantt.set_title("CCPM Project Schedule (Baseline Plan)")
+
+        ax_gantt.grid(axis="x", alpha=0.3)
+
+        # Add legend for task status
+        legend_elements = [
+            Patch(facecolor="red", alpha=0.6, label="Critical Chain Task"),
+            Patch(facecolor="orange", alpha=0.6, label="Feeding Chain Task"),
+            Patch(facecolor="blue", alpha=0.6, label="Regular Task"),
+            Patch(facecolor="green", alpha=0.8, label="Completed Work"),
+            Patch(
+                facecolor="lightblue", alpha=0.6, hatch="///", label="Remaining Work"
+            ),
+            Patch(facecolor="yellow", alpha=0.6, label="Feeding Buffer"),
+            Patch(facecolor="green", alpha=0.6, label="Project Buffer"),
+            Patch(facecolor="red", alpha=0.6, hatch="///", label="Consumed Buffer"),
+        ]
+        ax_gantt.legend(handles=legend_elements, loc="upper right", ncol=2)
+
+        # Add vertical line for status date in gantt chart too
+        if status_date:
+            status_day = (status_date - self.start_date).days
+            ax_gantt.axvline(
+                x=status_day, color="green", linestyle="--", linewidth=2, zorder=5
+            )
+
+        # Calculate resource utilization
+        resource_usage = self._calculate_resource_utilization()
+
+        # Resource utilization subplot
+        ax_resource = fig.add_subplot(gs[1], sharex=ax_gantt)
+
+        # Use the defined resources from the scheduler
+        all_resources = self.resources
+
+        # Plot resource utilization
+        for i, resource in enumerate(all_resources):
+            usage = resource_usage.get(resource, {})
+            days = list(usage.keys())
+            demands = [usage[day] for day in days]
+
+            # For each day with demand, place a text annotation
+            for day, demand in zip(days, demands):
+                if demand > 0:
+                    ax_resource.text(
+                        day,
+                        i,
+                        str(demand),
+                        ha="center",
+                        va="center",
+                        fontweight="bold",
+                        bbox=dict(
+                            boxstyle="round,pad=0.3",
+                            fc=self._get_demand_color(demand),
+                            ec="black",
+                            alpha=0.6,
+                        ),
+                    )
+
+        # Format the resource chart
+        ax_resource.set_xlabel("Days from project start")
+        ax_resource.set_ylabel("Resources")
+        ax_resource.set_title("Resource Utilization")
+        ax_resource.set_yticks(range(len(all_resources)))
+        ax_resource.set_yticklabels(all_resources)
+
+        # Create grid aligned with days - Make sure to use integers for range()
+        ax_resource.set_xticks(
+            range(0, project_duration_int + 10, 10)
+        )  # Major grid every 10 days
+        ax_resource.set_xticks(
+            range(0, project_duration_int + 10, 1), minor=True
+        )  # Minor grid every day
+        ax_resource.grid(which="major", color="gray", linestyle="-", alpha=0.5)
+        ax_resource.grid(which="minor", color="lightgray", linestyle="-", alpha=0.2)
+
+        ax_resource.set_xlim(0, project_duration_int + 5)  # Add some padding
+
+        # Set y-axis limits to give room for the annotations
+        ax_resource.set_ylim(-0.5, len(all_resources) - 0.5)
+
+        # Add a legend for resource demand colors
+        legend_elements = [
+            Patch(
+                facecolor=self._get_demand_color(1),
+                edgecolor="black",
+                alpha=0.6,
+                label="1 Task",
+            ),
+            Patch(
+                facecolor=self._get_demand_color(2),
+                edgecolor="black",
+                alpha=0.6,
+                label="2 Tasks",
+            ),
+            Patch(
+                facecolor=self._get_demand_color(3),
+                edgecolor="black",
+                alpha=0.6,
+                label="3+ Tasks",
+            ),
+        ]
+        ax_resource.legend(handles=legend_elements, loc="upper right", ncol=3)
+
+        # Add vertical line for status date in resource chart too
+        if status_date:
+            status_day = (status_date - self.start_date).days
+            ax_resource.axvline(
+                x=status_day, color="green", linestyle="--", linewidth=2, zorder=5
+            )
+
+        # Adjust layout
+        plt.tight_layout()
+
+        # Save or show the chart
+        if filename:
+            plt.savefig(filename, dpi=300, bbox_inches="tight")
+        plt.show()
+
+    def update_task_progress(self, task_id, remaining_duration, status_date=None):
+        """
+        Update task progress during execution phase.
+        Enhanced to ensure resource leveling and proper buffer positioning.
+
+        Args:
+            task_id: The ID of the task to update
+            remaining_duration: The remaining duration in days
+            status_date: The date of this status update (defaults to today)
+        """
+        if status_date is None:
+            status_date = datetime.now()
+
+        if task_id not in self.tasks:
+            raise ValueError(f"Task {task_id} not found in the project")
+
+        task = self.tasks[task_id]
+
+        # Store the original duration if not already tracking
+        if not hasattr(task, "original_duration"):
+            task.original_duration = task.duration
+
+        # Store the previous remaining duration
+        previous_remaining = getattr(task, "remaining_duration", task.duration)
+
+        # Update the remaining duration
+        task.remaining_duration = remaining_duration
+
+        # Keep history of updates for this task if not already doing so
+        if not hasattr(task, "progress_history"):
+            task.progress_history = []
+
+        # Add to history
+        task.progress_history.append(
+            {"date": status_date, "remaining": remaining_duration}
+        )
+
+        # Update task status
+        if remaining_duration <= 0:
+            task.status = "completed"
+            task.actual_end_date = status_date
+        else:
+            task.status = "in_progress"
+            # Update the expected end date based on status date and remaining duration
+            task.expected_end_date = status_date + timedelta(days=remaining_duration)
+
+        # If this is the first update, set the actual start date
+        if not hasattr(task, "actual_start_date"):
+            # If status_date is after the scheduled start_date, assume the task started on its scheduled start date
+            if status_date > task.start_date:
+                task.actual_start_date = task.start_date
+            else:
+                # If status update is before the scheduled start, use the status date
+                task.actual_start_date = status_date
+
+        # Recalculate the network to account for this change
+        self.recalculate_network_from_progress(status_date)
+
+        # Explicitly call resource leveling after updating progress
+        self._apply_resource_leveling_in_execution(status_date)
+
+        # Explicitly update feeding buffer positions to ensure ALAP positioning
+        self._update_feeding_buffer_positions(status_date)
+
+        return task
+
 
 def create_sample_project():
     # Define resources
@@ -2349,11 +2757,11 @@ def create_sample_project():
     print(report)
 
     # Save report to file
-    with open("ccpm_project_report.txt", "w", encoding="utf-8") as f:
+    with open("ccpm_project_report_01.txt", "w", encoding="utf-8") as f:
         f.write(report)
 
     # Set the execution date to today
-    current_date = datetime(2025, 4, 11)
+    current_date = datetime(2025, 4, 11)  # +10 days
     scheduler.set_execution_date(current_date)
 
     # Update task progress
@@ -2367,6 +2775,50 @@ def create_sample_project():
     # Visualize the current status
     scheduler.visualize_schedule("ccpm_gantt_02.png")
     scheduler.visualize_fever_chart("ccpm_fever_chart_02.png")
+
+    # Save report to file
+    with open("ccpm_project_report_02.txt", "w", encoding="utf-8") as f:
+        f.write(report)
+
+    # Set the execution date to today
+    current_date = datetime(2025, 4, 21)  # +20 days
+    scheduler.set_execution_date(current_date)
+
+    # Update task progress
+    scheduler.update_task_progress(1, 0)
+    # scheduler.update_task_progress(4, 15)
+
+    # Generate reports
+    report = scheduler.generate_execution_report()
+    print(report)
+
+    # Visualize the current status
+    scheduler.visualize_schedule("ccpm_gantt_03.png")
+    scheduler.visualize_fever_chart("ccpm_fever_chart_03.png")
+
+    # Save report to file
+    with open("ccpm_project_report_03.txt", "w", encoding="utf-8") as f:
+        f.write(report)
+
+    # Set the execution date to today
+    current_date = datetime(2025, 5, 1)  # +30 days
+    scheduler.set_execution_date(current_date)
+
+    # Update task progress
+    scheduler.update_task_progress(2, 5)
+    # scheduler.update_task_progress(4, 15)
+
+    # Generate reports
+    report = scheduler.generate_execution_report()
+    print(report)
+
+    # Visualize the current status
+    scheduler.visualize_schedule("ccpm_gantt_03.png")
+    scheduler.visualize_fever_chart("ccpm_fever_chart_03.png")
+
+    # Save report to file
+    with open("ccpm_project_report_03.txt", "w", encoding="utf-8") as f:
+        f.write(report)
 
 
 if __name__ == "__main__":
