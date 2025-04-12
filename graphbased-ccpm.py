@@ -1836,62 +1836,81 @@ class CCPMScheduler:
 
         # Plot each task
         for i, task in enumerate(sorted_tasks):
-            # COMPLETELY REWRITTEN SECTION FOR TASK VISUALIZATION
-
-            # Determine start position for all task types
-            if hasattr(task, "actual_start_date"):
-                start_day = (task.actual_start_date - self.start_date).days
-            elif hasattr(task, "new_start_date"):
-                start_day = (task.new_start_date - self.start_date).days
-            else:
-                start_day = (task.start_date - self.start_date).days
-
-            # Special handling for completed tasks - KEY FIX
+            # Determine start and end days for the task
             if hasattr(task, "status") and task.status == "completed":
-                # For completed tasks, we want to show a completed green bar from start to actual end
-                # If actual_end_date isn't set, use the status date
-                if hasattr(task, "actual_end_date") and task.actual_end_date:
+                # Completed task - use actual start and end
+                start_day = (task.actual_start_date - self.start_date).days
+                if hasattr(task, "actual_end_date"):
                     end_day = (task.actual_end_date - self.start_date).days
-                elif status_date:
+                else:
                     end_day = (status_date - self.start_date).days
-                else:
-                    # Fallback: use planned end date
-                    end_day = start_day + task.duration
 
-                # Calculate duration between start and end
                 duration = end_day - start_day
+                duration = max(1, duration)  # Ensure at least 1 day
 
-                # Ensure minimum 1 day duration for visibility
-                duration = max(1, duration)
-
-                print(f"DEBUG - Completed Task {task.id}: {task.name}")
-                print(
-                    f"  Start day: {start_day}, End day: {end_day}, Duration: {duration}"
-                )
-
-                # Draw the full green bar
+                # Use solid color for completed tasks
                 ax_gantt.barh(i, duration, left=start_day, color="green", alpha=1.0)
-
-            # In-progress tasks
             elif hasattr(task, "status") and task.status == "in_progress":
-                # For in-progress tasks, split into completed and remaining portions
+                # FIXED: For in-progress tasks, use the task's last update date, not the current status date
+                start_day = (task.actual_start_date - self.start_date).days
 
-                # Calculate completed portion
-                if status_date:
-                    completed_days = (status_date - task.actual_start_date).days
-                    completed_days = max(0, completed_days)  # Ensure non-negative
+                # IMPORTANT FIX: Get the last update date for this task
+                last_update_date = None
+                if hasattr(task, "progress_history") and task.progress_history:
+                    # Get the most recent update date from the task's history
+                    last_update_date = task.progress_history[-1]["date"]
                 else:
-                    completed_days = 0
+                    # If no history, use the actual start date
+                    last_update_date = task.actual_start_date
 
-                # Draw completed portion first (if any)
-                if completed_days > 0:
+                # Calculate completed portion (from actual_start to LAST UPDATE date, not status_date)
+                completed_duration = (last_update_date - task.actual_start_date).days
+                # Ensure completed_duration is not negative
+                completed_duration = max(0, completed_duration)
+
+                # Show completed portion
+                if completed_duration > 0:
                     ax_gantt.barh(
-                        i, completed_days, left=start_day, color="green", alpha=0.8
+                        i, completed_duration, left=start_day, color="green", alpha=0.8
                     )
 
-                # Then draw remaining portion
-                remaining_days = task.remaining_duration
-                remaining_start = start_day + completed_days
+                # Show remaining portion
+                remaining_duration = task.remaining_duration
+                start_remaining = (
+                    start_day + completed_duration
+                )  # This is last_update_date in days
+
+                ax_gantt.barh(
+                    i,
+                    remaining_duration,
+                    left=start_remaining,
+                    color=(
+                        "red"
+                        if task.id in self.critical_chain
+                        else "orange"
+                        if any(
+                            task.id in chain_info["chain"]
+                            for chain_info in self.feeding_chains
+                        )
+                        else "blue"
+                    ),
+                    alpha=0.6,
+                    hatch="///",
+                )
+
+                # For label positioning, use total duration
+                duration = completed_duration + remaining_duration
+            elif hasattr(task, "new_start_date"):
+                # Task with updated schedule but not started
+                start_day = (task.new_start_date - self.start_date).days
+                duration = (
+                    task.remaining_duration
+                    if hasattr(task, "remaining_duration")
+                    else task.duration
+                )
+                # Use lighter color for scheduled but not started tasks
+                alpha = 0.5
+                hatch = None
 
                 # Determine color based on task type
                 if task.id in self.critical_chain:
@@ -1904,36 +1923,15 @@ class CCPMScheduler:
                     color = "blue"
 
                 ax_gantt.barh(
-                    i,
-                    remaining_days,
-                    left=remaining_start,
-                    color=color,
-                    alpha=0.6,
-                    hatch="///",
+                    i, duration, left=start_day, color=color, alpha=alpha, hatch=hatch
                 )
-
-                # Total duration for label positioning
-                duration = completed_days + remaining_days
-
-            # Tasks with updated schedule but not started
-            elif hasattr(task, "new_start_date"):
-                duration = getattr(task, "remaining_duration", task.duration)
-
-                # Determine color based on task type
-                if task.id in self.critical_chain:
-                    color = "red"
-                elif any(
-                    task.id in chain_info["chain"] for chain_info in self.feeding_chains
-                ):
-                    color = "orange"
-                else:
-                    color = "blue"
-
-                ax_gantt.barh(i, duration, left=start_day, color=color, alpha=0.5)
-
-            # Original planned schedule (no updates)
             else:
+                # Original planned schedule
+                start_day = (task.start_date - self.start_date).days
                 duration = task.duration
+                # Use transparent for original plan
+                alpha = 0.5
+                hatch = None
 
                 # Determine color based on task type
                 if task.id in self.critical_chain:
@@ -1945,7 +1943,9 @@ class CCPMScheduler:
                 else:
                     color = "blue"
 
-                ax_gantt.barh(i, duration, left=start_day, color=color, alpha=0.5)
+                ax_gantt.barh(
+                    i, duration, left=start_day, color=color, alpha=alpha, hatch=hatch
+                )
 
             # Format the resource list
             if isinstance(task.resources, str):
