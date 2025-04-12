@@ -2797,7 +2797,6 @@ def create_sample_project():
 
     # Update task progress
     scheduler.update_task_progress(1, 0)
-    # scheduler.update_task_progress(4, 15)
 
     # Generate reports
     report = scheduler.generate_execution_report()
@@ -2824,11 +2823,11 @@ def create_sample_project():
     print(report)
 
     # Visualize the current status
-    scheduler.visualize_schedule("ccpm_gantt_03.png")
-    scheduler.visualize_fever_chart("ccpm_fever_chart_03.png")
+    scheduler.visualize_schedule("ccpm_gantt_04.png")
+    scheduler.visualize_fever_chart("ccpm_fever_chart_04.png")
 
     # Save report to file
-    with open("ccpm_project_report_03.txt", "w", encoding="utf-8") as f:
+    with open("ccpm_project_report_04.txt", "w", encoding="utf-8") as f:
         f.write(report)
 
 
