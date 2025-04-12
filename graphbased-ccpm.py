@@ -1090,184 +1090,6 @@ class CCPMScheduler:
 
         return execution_date
 
-    def generate_execution_report(self, status_date=None):
-        """
-        Generate a text report of the project's execution status.
-
-        Args:
-            status_date: The date to use for the report (defaults to self.execution_date or today)
-
-        Returns:
-            A formatted string with the execution report
-        """
-        if status_date is None:
-            if hasattr(self, "execution_date"):
-                status_date = self.execution_date
-            else:
-                status_date = datetime.now()
-
-        report = []
-        report.append("CCPM Project Execution Status Report")
-        report.append("===================================")
-        report.append(f"Report Date: {status_date.strftime('%Y-%m-%d')}")
-        report.append(f"Project Start Date: {self.start_date.strftime('%Y-%m-%d')}")
-
-        # Calculate overall project completion
-        total_duration = sum(task.duration for task in self.tasks.values())
-        completed_duration = sum(
-            task.duration - getattr(task, "remaining_duration", task.duration)
-            for task in self.tasks.values()
-        )
-
-        if total_duration > 0:
-            completion_pct = completed_duration / total_duration * 100
-            report.append(f"Project Completion: {completion_pct:.1f}%")
-
-        # Find projected end date
-        latest_end_date = status_date
-        for task_id, task in self.tasks.items():
-            if hasattr(task, "new_end_date") and task.new_end_date > latest_end_date:
-                latest_end_date = task.new_end_date
-
-        # Add project buffer if exists
-        if (
-            hasattr(self, "project_buffer_id")
-            and self.project_buffer_id in self.buffers
-        ):
-            project_buffer = self.buffers[self.project_buffer_id]
-            if hasattr(project_buffer, "new_end_date"):
-                buffer_end = project_buffer.new_end_date
-                if buffer_end > latest_end_date:
-                    latest_end_date = buffer_end
-
-        report.append(f"Projected End Date: {latest_end_date.strftime('%Y-%m-%d')}")
-        original_end = max(task.end_date for task in self.tasks.values())
-        if (
-            hasattr(self, "project_buffer_id")
-            and self.project_buffer_id in self.buffers
-        ):
-            original_buffer_end = original_end + timedelta(
-                days=self.buffers[self.project_buffer_id].size
-            )
-            report.append(
-                f"Original End Date: {original_buffer_end.strftime('%Y-%m-%d')}"
-            )
-
-            if latest_end_date > original_buffer_end:
-                delay = (latest_end_date - original_buffer_end).days
-                report.append(f"Project is currently {delay} days behind schedule")
-            elif latest_end_date < original_buffer_end:
-                ahead = (original_buffer_end - latest_end_date).days
-                report.append(f"Project is currently {ahead} days ahead of schedule")
-            else:
-                report.append("Project is currently on schedule")
-
-        # Buffer Status
-        if hasattr(self, "buffers") and self.buffers:
-            report.append("\nBuffer Status:")
-            report.append("-------------")
-
-            for buffer_id, buffer in self.buffers.items():
-                buffer_type = (
-                    "Project Buffer"
-                    if buffer.buffer_type == "project"
-                    else "Feeding Buffer"
-                )
-                original_size = buffer.size
-                remaining = getattr(buffer, "remaining_size", original_size)
-                consumed = original_size - remaining
-                consumption_pct = (
-                    (consumed / original_size * 100) if original_size > 0 else 0
-                )
-
-                report.append(f"{buffer_type} ({buffer.name}):")
-                report.append(f"  Original Size: {original_size} days")
-                report.append(f"  Consumed: {consumed} days ({consumption_pct:.1f}%)")
-                report.append(f"  Remaining: {remaining} days")
-
-                # Status indicator
-                if consumption_pct < 33:
-                    status = "GREEN (Safe)"
-                elif consumption_pct < 67:
-                    status = "YELLOW (Warning)"
-                else:
-                    status = "RED (Critical)"
-
-                report.append(f"  Status: {status}")
-                report.append("")
-
-        # Tasks in progress
-        in_progress = [
-            task
-            for task in self.tasks.values()
-            if hasattr(task, "status") and task.status == "in_progress"
-        ]
-
-        if in_progress:
-            report.append("\nTasks In Progress:")
-            report.append("-----------------")
-
-            for task in in_progress:
-                report.append(f"Task {task.id}: {task.name}")
-                report.append(f"  Original Duration: {task.duration} days")
-                report.append(f"  Remaining Duration: {task.remaining_duration} days")
-                report.append(
-                    f"  Progress: {((task.duration - task.remaining_duration) / task.duration * 100):.1f}%"
-                )
-                report.append(
-                    f"  Started On: {task.actual_start_date.strftime('%Y-%m-%d')}"
-                )
-                report.append(
-                    f"  Expected Completion: {(status_date + timedelta(days=task.remaining_duration)).strftime('%Y-%m-%d')}"
-                )
-                report.append("")
-
-        # Next tasks to start
-        not_started = [
-            task
-            for task in self.tasks.values()
-            if not hasattr(task, "status")
-            or task.status not in ["completed", "in_progress"]
-        ]
-
-        # Sort by start date
-        not_started.sort(key=lambda x: getattr(x, "new_start_date", x.start_date))
-
-        if not_started:
-            report.append("\nUpcoming Tasks:")
-            report.append("--------------")
-
-            # Show the next 5 tasks
-            for task in not_started[:5]:
-                start_date = getattr(task, "new_start_date", task.start_date)
-
-                report.append(f"Task {task.id}: {task.name}")
-                report.append(f"  Duration: {task.duration} days")
-                report.append(f"  Start Date: {start_date.strftime('%Y-%m-%d')}")
-
-                # Format the resource list
-                if isinstance(task.resources, str):
-                    resource_str = task.resources
-                elif isinstance(task.resources, list):
-                    resource_str = ", ".join(task.resources)
-                else:
-                    resource_str = ""
-
-                report.append(f"  Resources: {resource_str}")
-                report.append("")
-
-        # Completed tasks
-        completed = [
-            task
-            for task in self.tasks.values()
-            if hasattr(task, "status") and task.status == "completed"
-        ]
-
-        if completed:
-            report.append(f"\nCompleted Tasks: {len(completed)} of {len(self.tasks)}")
-
-        return "\n".join(report)
-
     def simulate_execution(
         self,
         simulation_date,
@@ -1303,6 +1125,9 @@ class CCPMScheduler:
         # Mark tasks as completed
         for task_id in completed_task_ids:
             if task_id in self.tasks:
+                print(
+                    f"Marking Task {task_id} as completed on {simulation_date.strftime('%Y-%m-%d')}"
+                )
                 self.update_task_progress(task_id, 0, simulation_date)
 
         # Mark tasks as in progress with specified progress
@@ -1319,6 +1144,9 @@ class CCPMScheduler:
                     0.1, remaining
                 )  # Ensure some remaining work unless complete
 
+                print(
+                    f"Marking Task {task_id} as {progress_pct}% complete on {simulation_date.strftime('%Y-%m-%d')}"
+                )
                 self.update_task_progress(task_id, remaining, simulation_date)
 
         # Generate report
@@ -1989,7 +1817,7 @@ class CCPMScheduler:
         project_duration = (last_end_date - self.start_date).days
 
         # Convert to integer to avoid the range() error
-        project_duration_int = int(project_duration) + 5  # Add some padding
+        project_duration_int = int(project_duration)
 
         # Create figure with GridSpec to have two subplots
         fig = plt.figure(figsize=(14, 12))
@@ -2008,69 +1836,88 @@ class CCPMScheduler:
 
         # Plot each task
         for i, task in enumerate(sorted_tasks):
-            # Determine start and end days for the task
+            # COMPLETELY REWRITTEN SECTION FOR TASK VISUALIZATION
+
+            # Determine start position for all task types
+            if hasattr(task, "actual_start_date"):
+                start_day = (task.actual_start_date - self.start_date).days
+            elif hasattr(task, "new_start_date"):
+                start_day = (task.new_start_date - self.start_date).days
+            else:
+                start_day = (task.start_date - self.start_date).days
+
+            # Special handling for completed tasks - KEY FIX
             if hasattr(task, "status") and task.status == "completed":
-                # Completed task - use actual start and end
-                start_day = (task.actual_start_date - self.start_date).days
-                duration = (task.actual_end_date - task.actual_start_date).days
-                # Use solid color for completed tasks
-                alpha = 1.0
-                hatch = None
-                ax_gantt.barh(
-                    i, duration, left=start_day, color="green", alpha=alpha, hatch=hatch
+                # For completed tasks, we want to show a completed green bar from start to actual end
+                # If actual_end_date isn't set, use the status date
+                if hasattr(task, "actual_end_date") and task.actual_end_date:
+                    end_day = (task.actual_end_date - self.start_date).days
+                elif status_date:
+                    end_day = (status_date - self.start_date).days
+                else:
+                    # Fallback: use planned end date
+                    end_day = start_day + task.duration
+
+                # Calculate duration between start and end
+                duration = end_day - start_day
+
+                # Ensure minimum 1 day duration for visibility
+                duration = max(1, duration)
+
+                print(f"DEBUG - Completed Task {task.id}: {task.name}")
+                print(
+                    f"  Start day: {start_day}, End day: {end_day}, Duration: {duration}"
                 )
+
+                # Draw the full green bar
+                ax_gantt.barh(i, duration, left=start_day, color="green", alpha=1.0)
+
+            # In-progress tasks
             elif hasattr(task, "status") and task.status == "in_progress":
-                # In progress task - use actual start and split into completed and remaining
-                start_day = (task.actual_start_date - self.start_date).days
+                # For in-progress tasks, split into completed and remaining portions
 
-                # Calculate completed portion (from actual_start to status_date)
-                completed_duration = (status_date - task.actual_start_date).days
-                # Ensure completed_duration is not negative
-                completed_duration = max(0, completed_duration)
+                # Calculate completed portion
+                if status_date:
+                    completed_days = (status_date - task.actual_start_date).days
+                    completed_days = max(0, completed_days)  # Ensure non-negative
+                else:
+                    completed_days = 0
 
-                # Show completed portion
-                if completed_duration > 0:
+                # Draw completed portion first (if any)
+                if completed_days > 0:
                     ax_gantt.barh(
-                        i, completed_duration, left=start_day, color="green", alpha=0.8
+                        i, completed_days, left=start_day, color="green", alpha=0.8
                     )
 
-                # Show remaining portion
-                remaining_duration = task.remaining_duration
-                start_remaining = (
-                    start_day + completed_duration
-                )  # This is status_date in days
+                # Then draw remaining portion
+                remaining_days = task.remaining_duration
+                remaining_start = start_day + completed_days
+
+                # Determine color based on task type
+                if task.id in self.critical_chain:
+                    color = "red"
+                elif any(
+                    task.id in chain_info["chain"] for chain_info in self.feeding_chains
+                ):
+                    color = "orange"
+                else:
+                    color = "blue"
 
                 ax_gantt.barh(
                     i,
-                    remaining_duration,
-                    left=start_remaining,
-                    color=(
-                        "red"
-                        if task.id in self.critical_chain
-                        else "orange"
-                        if any(
-                            task.id in chain_info["chain"]
-                            for chain_info in self.feeding_chains
-                        )
-                        else "blue"
-                    ),
+                    remaining_days,
+                    left=remaining_start,
+                    color=color,
                     alpha=0.6,
                     hatch="///",
                 )
 
-                # For label positioning, use total duration
-                duration = completed_duration + remaining_duration
+                # Total duration for label positioning
+                duration = completed_days + remaining_days
+
+            # Tasks with updated schedule but not started
             elif hasattr(task, "new_start_date"):
-                # Task with updated schedule but not started
-                start_day = (task.new_start_date - self.start_date).days
-                duration = (
-                    task.remaining_duration
-                    if hasattr(task, "remaining_duration")
-                    else task.duration
-                )
-                # Use lighter color for scheduled but not started tasks
-                alpha = 0.5
-                hatch = None
+                duration = getattr(task, "remaining_duration", task.duration)
 
                 # Determine color based on task type
                 if task.id in self.critical_chain:
@@ -2082,16 +1929,11 @@ class CCPMScheduler:
                 else:
                     color = "blue"
 
-                ax_gantt.barh(
-                    i, duration, left=start_day, color=color, alpha=alpha, hatch=hatch
-                )
+                ax_gantt.barh(i, duration, left=start_day, color=color, alpha=0.5)
+
+            # Original planned schedule (no updates)
             else:
-                # Original planned schedule
-                start_day = (task.start_date - self.start_date).days
                 duration = task.duration
-                # Use transparent for original plan
-                alpha = 0.5
-                hatch = None
 
                 # Determine color based on task type
                 if task.id in self.critical_chain:
@@ -2103,9 +1945,7 @@ class CCPMScheduler:
                 else:
                     color = "blue"
 
-                ax_gantt.barh(
-                    i, duration, left=start_day, color=color, alpha=alpha, hatch=hatch
-                )
+                ax_gantt.barh(i, duration, left=start_day, color=color, alpha=0.5)
 
             # Format the resource list
             if isinstance(task.resources, str):
@@ -2374,66 +2214,6 @@ class CCPMScheduler:
             plt.savefig(filename, dpi=300, bbox_inches="tight")
         plt.show()
 
-    def update_task_progress(self, task_id, remaining_duration, status_date=None):
-        """
-        Update task progress during execution phase.
-
-        Args:
-            task_id: The ID of the task to update
-            remaining_duration: The remaining duration in days
-            status_date: The date of this status update (defaults to today)
-        """
-        if status_date is None:
-            status_date = datetime.now()
-
-        if task_id not in self.tasks:
-            raise ValueError(f"Task {task_id} not found in the project")
-
-        task = self.tasks[task_id]
-
-        # Store the original duration if not already tracking
-        if not hasattr(task, "original_duration"):
-            task.original_duration = task.duration
-
-        # Store the previous remaining duration
-        previous_remaining = getattr(task, "remaining_duration", task.duration)
-
-        # Update the remaining duration
-        task.remaining_duration = remaining_duration
-
-        # Keep history of updates for this task if not already doing so
-        if not hasattr(task, "progress_history"):
-            task.progress_history = []
-
-        # Add to history
-        task.progress_history.append(
-            {"date": status_date, "remaining": remaining_duration}
-        )
-
-        # Update task status
-        if remaining_duration <= 0:
-            task.status = "completed"
-            # IMPORTANT FIX: Always use the current status_date as the actual_end_date when marking complete
-            task.actual_end_date = status_date
-        else:
-            task.status = "in_progress"
-            # Update the expected end date based on status date and remaining duration
-            task.expected_end_date = status_date + timedelta(days=remaining_duration)
-
-        # If this is the first update, set the actual start date
-        if not hasattr(task, "actual_start_date"):
-            # If status_date is after the scheduled start_date, assume the task started on its scheduled start date
-            if status_date > task.start_date:
-                task.actual_start_date = task.start_date
-            else:
-                # If status update is before the scheduled start, use the status date
-                task.actual_start_date = status_date
-
-        # Recalculate the network to account for this change
-        self.recalculate_network_from_progress(status_date)
-
-        return task
-
     def recalculate_network_from_progress(self, status_date):
         """
         Recalculate the entire network schedule based on task progress.
@@ -2677,6 +2457,387 @@ class CCPMScheduler:
         # Return updated tasks and buffers
         return self.tasks, self.buffers if hasattr(self, "buffers") else None
 
+    # Fix for update_task_progress to correctly set the completion date for tasks
+    # This ensures the actual_end_date is properly set to the status date when a task is marked complete
+
+    def generate_execution_report(self, status_date=None):
+        """
+        Generate a text report of the project's execution status with enhanced details about completed tasks.
+
+        Args:
+            status_date: The date to use for the report (defaults to self.execution_date or today)
+
+        Returns:
+            A formatted string with the execution report
+        """
+        if status_date is None:
+            if hasattr(self, "execution_date"):
+                status_date = self.execution_date
+            else:
+                status_date = datetime.now()
+
+        report = []
+        report.append("CCPM Project Execution Status Report")
+        report.append("===================================")
+        report.append(f"Report Date: {status_date.strftime('%Y-%m-%d')}")
+        report.append(f"Project Start Date: {self.start_date.strftime('%Y-%m-%d')}")
+
+        # Calculate overall project completion
+        total_duration = sum(task.duration for task in self.tasks.values())
+        completed_duration = sum(
+            task.duration - getattr(task, "remaining_duration", task.duration)
+            for task in self.tasks.values()
+        )
+
+        if total_duration > 0:
+            completion_pct = completed_duration / total_duration * 100
+            report.append(f"Project Completion: {completion_pct:.1f}%")
+
+        # Find projected end date
+        latest_end_date = status_date
+        for task_id, task in self.tasks.items():
+            if hasattr(task, "new_end_date") and task.new_end_date > latest_end_date:
+                latest_end_date = task.new_end_date
+
+        # Add project buffer if exists
+        if (
+            hasattr(self, "project_buffer_id")
+            and self.project_buffer_id in self.buffers
+        ):
+            project_buffer = self.buffers[self.project_buffer_id]
+            if hasattr(project_buffer, "new_end_date"):
+                buffer_end = project_buffer.new_end_date
+                if buffer_end > latest_end_date:
+                    latest_end_date = buffer_end
+
+        report.append(f"Projected End Date: {latest_end_date.strftime('%Y-%m-%d')}")
+        original_end = max(task.end_date for task in self.tasks.values())
+        if (
+            hasattr(self, "project_buffer_id")
+            and self.project_buffer_id in self.buffers
+        ):
+            original_buffer_end = original_end + timedelta(
+                days=self.buffers[self.project_buffer_id].size
+            )
+            report.append(
+                f"Original End Date: {original_buffer_end.strftime('%Y-%m-%d')}"
+            )
+
+            if latest_end_date > original_buffer_end:
+                delay = (latest_end_date - original_buffer_end).days
+                report.append(f"Project is currently {delay} days behind schedule")
+            elif latest_end_date < original_buffer_end:
+                ahead = (original_buffer_end - latest_end_date).days
+                report.append(f"Project is currently {ahead} days ahead of schedule")
+            else:
+                report.append("Project is currently on schedule")
+
+        # Buffer Status
+        if hasattr(self, "buffers") and self.buffers:
+            report.append("\nBuffer Status:")
+            report.append("-------------")
+
+            for buffer_id, buffer in self.buffers.items():
+                buffer_type = (
+                    "Project Buffer"
+                    if buffer.buffer_type == "project"
+                    else "Feeding Buffer"
+                )
+                original_size = buffer.size
+                remaining = getattr(buffer, "remaining_size", original_size)
+                consumed = original_size - remaining
+                consumption_pct = (
+                    (consumed / original_size * 100) if original_size > 0 else 0
+                )
+
+                report.append(f"{buffer_type} ({buffer.name}):")
+                report.append(f"  Original Size: {original_size} days")
+                report.append(f"  Consumed: {consumed} days ({consumption_pct:.1f}%)")
+                report.append(f"  Remaining: {remaining} days")
+
+                # Status indicator
+                if consumption_pct < 33:
+                    status = "GREEN (Safe)"
+                elif consumption_pct < 67:
+                    status = "YELLOW (Warning)"
+                else:
+                    status = "RED (Critical)"
+
+                report.append(f"  Status: {status}")
+                report.append("")
+
+        # Tasks in progress
+        in_progress = [
+            task
+            for task in self.tasks.values()
+            if hasattr(task, "status") and task.status == "in_progress"
+        ]
+
+        if in_progress:
+            report.append("\nTasks In Progress:")
+            report.append("-----------------")
+
+            for task in in_progress:
+                report.append(f"Task {task.id}: {task.name}")
+                report.append(f"  Original Duration: {task.duration} days")
+                report.append(f"  Remaining Duration: {task.remaining_duration} days")
+                report.append(
+                    f"  Progress: {((task.duration - task.remaining_duration) / task.duration * 100):.1f}%"
+                )
+                report.append(
+                    f"  Started On: {task.actual_start_date.strftime('%Y-%m-%d')}"
+                )
+                report.append(
+                    f"  Expected Completion: {(status_date + timedelta(days=task.remaining_duration)).strftime('%Y-%m-%d')}"
+                )
+                report.append("")
+
+        # ENHANCED: Detailed section for completed tasks
+        completed = [
+            task
+            for task in self.tasks.values()
+            if hasattr(task, "status") and task.status == "completed"
+        ]
+
+        if completed:
+            report.append("\nCompleted Tasks:")
+            report.append("---------------")
+            report.append(f"Total Completed: {len(completed)} of {len(self.tasks)}")
+            report.append("")
+
+            # Sort completed tasks by ID for consistent reporting
+            completed.sort(key=lambda x: x.id)
+
+            for task in completed:
+                report.append(f"Task {task.id}: {task.name}")
+
+                # Format the resource list
+                if isinstance(task.resources, str):
+                    resource_str = task.resources
+                elif isinstance(task.resources, list):
+                    resource_str = ", ".join(task.resources)
+                else:
+                    resource_str = "None"
+
+                report.append(f"  Resources: {resource_str}")
+                report.append(f"  Planned Duration: {task.duration} days")
+
+                # Original planned dates
+                report.append(
+                    f"  Original Planned Start: {task.start_date.strftime('%Y-%m-%d')}"
+                )
+                planned_end = task.start_date + timedelta(days=task.duration)
+                report.append(
+                    f"  Original Planned End: {planned_end.strftime('%Y-%m-%d')}"
+                )
+
+                # Actual dates
+                if hasattr(task, "actual_start_date"):
+                    report.append(
+                        f"  Actual Start: {task.actual_start_date.strftime('%Y-%m-%d')}"
+                    )
+                else:
+                    report.append("  Actual Start: [Not recorded]")
+
+                if hasattr(task, "actual_end_date"):
+                    report.append(
+                        f"  Actual End: {task.actual_end_date.strftime('%Y-%m-%d')}"
+                    )
+
+                    # Calculate actual duration
+                    if hasattr(task, "actual_start_date"):
+                        actual_duration = (
+                            task.actual_end_date - task.actual_start_date
+                        ).days
+                        report.append(f"  Actual Duration: {actual_duration} days")
+
+                        # Compare with planned
+                        if actual_duration > task.duration:
+                            report.append(
+                                f"  Schedule Performance: {actual_duration - task.duration} days late"
+                            )
+                        elif actual_duration < task.duration:
+                            report.append(
+                                f"  Schedule Performance: {task.duration - actual_duration} days early"
+                            )
+                        else:
+                            report.append(f"  Schedule Performance: On schedule")
+                else:
+                    report.append("  Actual End: [Not recorded]")
+
+                # Additional debugging information
+                report.append("  Other Attributes:")
+                for attr_name in dir(task):
+                    # Skip built-in attributes and methods
+                    if attr_name.startswith("_") or callable(getattr(task, attr_name)):
+                        continue
+
+                    # Skip already reported attributes
+                    if attr_name in [
+                        "id",
+                        "name",
+                        "resources",
+                        "duration",
+                        "start_date",
+                        "actual_start_date",
+                        "actual_end_date",
+                        "status",
+                    ]:
+                        continue
+
+                    attr_value = getattr(task, attr_name)
+
+                    # Format datetime objects
+                    if isinstance(attr_value, datetime):
+                        attr_value = attr_value.strftime("%Y-%m-%d")
+
+                    report.append(f"    {attr_name}: {attr_value}")
+
+                report.append("")
+
+        # Next tasks to start
+        not_started = [
+            task
+            for task in self.tasks.values()
+            if not hasattr(task, "status")
+            or task.status not in ["completed", "in_progress"]
+        ]
+
+        # Sort by start date
+        not_started.sort(key=lambda x: getattr(x, "new_start_date", x.start_date))
+
+        if not_started:
+            report.append("\nUpcoming Tasks:")
+            report.append("--------------")
+
+            # Show the next 5 tasks
+            for task in not_started[:5]:
+                start_date = getattr(task, "new_start_date", task.start_date)
+
+                report.append(f"Task {task.id}: {task.name}")
+                report.append(f"  Duration: {task.duration} days")
+                report.append(f"  Start Date: {start_date.strftime('%Y-%m-%d')}")
+
+                # Format the resource list
+                if isinstance(task.resources, str):
+                    resource_str = task.resources
+                elif isinstance(task.resources, list):
+                    resource_str = ", ".join(task.resources)
+                else:
+                    resource_str = ""
+
+                report.append(f"  Resources: {resource_str}")
+                report.append("")
+
+        return "\n".join(report)
+
+    def update_task_progress(self, task_id, remaining_duration, status_date=None):
+        """
+        Update task progress during execution phase.
+
+        Args:
+            task_id: The ID of the task to update
+            remaining_duration: The remaining duration in days (0 means task is complete)
+            status_date: The date of this status update (defaults to today)
+        """
+        if status_date is None:
+            status_date = datetime.now()
+
+        if task_id not in self.tasks:
+            raise ValueError(f"Task {task_id} not found in the project")
+
+        task = self.tasks[task_id]
+
+        # Print information about the task before update
+        print(f"BEFORE UPDATE - Task {task_id}: {task.name}")
+        print(f"  Original duration: {task.duration}")
+        print(f"  Planned start: {task.start_date.strftime('%Y-%m-%d')}")
+        print(
+            f"  Planned end: {(task.start_date + timedelta(days=task.duration)).strftime('%Y-%m-%d')}"
+        )
+        if hasattr(task, "status"):
+            print(f"  Current status: {task.status}")
+        if hasattr(task, "actual_start_date"):
+            print(f"  Actual start: {task.actual_start_date.strftime('%Y-%m-%d')}")
+        if hasattr(task, "actual_end_date"):
+            print(f"  Actual end: {task.actual_end_date.strftime('%Y-%m-%d')}")
+        if hasattr(task, "remaining_duration"):
+            print(f"  Current remaining: {task.remaining_duration}")
+        print(f"  Status update date: {status_date.strftime('%Y-%m-%d')}")
+        print(f"  New remaining duration: {remaining_duration}")
+
+        # Store the original duration if not already tracking
+        if not hasattr(task, "original_duration"):
+            task.original_duration = task.duration
+
+        # Store the previous remaining duration
+        previous_remaining = getattr(task, "remaining_duration", task.duration)
+
+        # Update the remaining duration
+        task.remaining_duration = remaining_duration
+
+        # If this is the first update, set the actual start date
+        if not hasattr(task, "actual_start_date"):
+            # If status_date is after the scheduled start_date, assume the task started on its scheduled start date
+            if hasattr(task, "start_date") and status_date > task.start_date:
+                task.actual_start_date = task.start_date
+            else:
+                # If status update is before the scheduled start, use the status date
+                task.actual_start_date = status_date
+
+            # Also set new_start_date
+            task.new_start_date = task.actual_start_date
+
+        # Keep history of updates for this task if not already doing so
+        if not hasattr(task, "progress_history"):
+            task.progress_history = []
+
+        # Add to history
+        task.progress_history.append(
+            {"date": status_date, "remaining": remaining_duration}
+        )
+
+        # Update task status
+        if remaining_duration <= 0:
+            # Task is now complete
+            task.status = "completed"
+
+            # CRITICAL FIX: Set the actual_end_date to the current status_date
+            task.actual_end_date = status_date
+
+            # Make sure the task duration is updated to reflect actual duration
+            task.actual_duration = (task.actual_end_date - task.actual_start_date).days
+
+            # Also update new_end_date for consistency
+            task.new_end_date = status_date
+        else:
+            # Task is in progress
+            task.status = "in_progress"
+
+            # Update the expected end date based on status date and remaining duration
+            task.expected_end_date = status_date + timedelta(days=remaining_duration)
+
+            # Update new_end_date for consistency
+            task.new_end_date = task.expected_end_date
+
+        # Print information about the task after update
+        print(f"AFTER UPDATE - Task {task_id}: {task.name}")
+        print(f"  Status: {task.status}")
+        print(f"  Actual start: {task.actual_start_date.strftime('%Y-%m-%d')}")
+        if task.status == "completed":
+            print(f"  Actual end: {task.actual_end_date.strftime('%Y-%m-%d')}")
+            print(
+                f"  Actual duration: {(task.actual_end_date - task.actual_start_date).days} days"
+            )
+        else:
+            print(f"  Remaining: {task.remaining_duration} days")
+            print(f"  Expected end: {task.expected_end_date.strftime('%Y-%m-%d')}")
+
+        # Recalculate the network with these changes
+        self.recalculate_network_from_progress(status_date)
+
+        return task
+
 
 def create_sample_project():
     # Define resources
@@ -2732,6 +2893,9 @@ def create_sample_project():
 
     # Create scheduler with both project buffer (50%) and feeding buffer (30%)
     start_date = datetime(2025, 4, 1)  # Today
+    print(f"Start date set to: {start_date.strftime('%Y-%m-%d')}")
+    print("################################################")
+
     scheduler = CCPMScheduler(
         tasks,
         resources,
@@ -2766,7 +2930,6 @@ def create_sample_project():
     # Generate and print report
     report = scheduler.generate_report()
     print(report)
-
     # Save report to file
     with open("ccpm_project_report_01.txt", "w", encoding="utf-8") as f:
         f.write(report)
@@ -2774,6 +2937,8 @@ def create_sample_project():
     # Set the execution date to today
     current_date = datetime(2025, 4, 11)  # +10 days
     scheduler.set_execution_date(current_date)
+    print(f"Execution date set to: {current_date.strftime('%Y-%m-%d')}")
+    print("################################################")
 
     # Update task progress
     scheduler.update_task_progress(1, 10)
@@ -2782,18 +2947,19 @@ def create_sample_project():
     # Generate reports
     report = scheduler.generate_execution_report()
     print(report)
+    # Save report to file
+    with open("ccpm_project_report_02.txt", "w", encoding="utf-8") as f:
+        f.write(report)
 
     # Visualize the current status
     scheduler.visualize_schedule("ccpm_gantt_02.png")
     scheduler.visualize_fever_chart("ccpm_fever_chart_02.png")
 
-    # Save report to file
-    with open("ccpm_project_report_02.txt", "w", encoding="utf-8") as f:
-        f.write(report)
-
     # Set the execution date to today
     current_date = datetime(2025, 4, 21)  # +20 days
     scheduler.set_execution_date(current_date)
+    print(f"Execution date set to: {current_date.strftime('%Y-%m-%d')}")
+    print("################################################")
 
     # Update task progress
     scheduler.update_task_progress(1, 0)
@@ -2801,18 +2967,19 @@ def create_sample_project():
     # Generate reports
     report = scheduler.generate_execution_report()
     print(report)
+    # Save report to file
+    with open("ccpm_project_report_03.txt", "w", encoding="utf-8") as f:
+        f.write(report)
 
     # Visualize the current status
     scheduler.visualize_schedule("ccpm_gantt_03.png")
     scheduler.visualize_fever_chart("ccpm_fever_chart_03.png")
 
-    # Save report to file
-    with open("ccpm_project_report_03.txt", "w", encoding="utf-8") as f:
-        f.write(report)
-
     # Set the execution date to today
     current_date = datetime(2025, 5, 1)  # +30 days
     scheduler.set_execution_date(current_date)
+    print(f"Execution date set to: {current_date.strftime('%Y-%m-%d')}")
+    print("################################################")
 
     # Update task progress
     scheduler.update_task_progress(2, 5)
@@ -2821,14 +2988,13 @@ def create_sample_project():
     # Generate reports
     report = scheduler.generate_execution_report()
     print(report)
+    # Save report to file
+    with open("ccpm_project_report_04.txt", "w", encoding="utf-8") as f:
+        f.write(report)
 
     # Visualize the current status
     scheduler.visualize_schedule("ccpm_gantt_04.png")
     scheduler.visualize_fever_chart("ccpm_fever_chart_04.png")
-
-    # Save report to file
-    with open("ccpm_project_report_04.txt", "w", encoding="utf-8") as f:
-        f.write(report)
 
 
 if __name__ == "__main__":
