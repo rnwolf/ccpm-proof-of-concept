@@ -3,9 +3,9 @@ CCPM Project Execution Status Report
 Report Date: 2025-05-01
 Project Start Date: 2025-04-01
 Project Completion: 45.5%
-Projected End Date: 2025-06-06
+Projected End Date: 2025-07-04
 Original End Date: 2025-07-30
-Project is currently 54 days ahead of schedule
+Project is currently 26 days ahead of schedule
 
 Buffer Status:
 -------------
@@ -28,7 +28,7 @@ Task 2: T1.2
   Original Duration: 20 days
   Remaining Duration: 5 days
   Progress: 75.0%
-  Started On: 2025-04-12
+  Started On: 2025-05-01
   Expected Completion: 2025-05-06
 
 Task 4: T2.1
@@ -49,24 +49,24 @@ Task 1: T1.1
   Original Planned Start: 2025-04-01
   Original Planned End: 2025-05-01
   Actual Start: 2025-04-01
-  Actual End: 2025-04-12
-  Actual Duration: 11 days
-  Schedule Performance: 19 days early
+  Actual End: 2025-04-21
+  Actual Duration: 20 days
+  Schedule Performance: 10 days early
   Other Attributes:
-    actual_duration: 11
+    actual_duration: 20
     color: 0
     dependencies: []
     early_finish: 30
     early_start: 0
     end_date: 2025-05-01
-    expected_end_date: 2025-04-22
+    expected_end_date: 2025-04-21
     is_critical: True
     late_finish: 30
     late_start: 0
-    new_end_date: 2025-04-12
+    new_end_date: 2025-04-21
     new_start_date: 2025-04-01
     original_duration: 30
-    progress_history: [{'date': datetime.datetime(2025, 4, 12, 16, 41, 49, 81830), 'remaining': 10}, {'date': datetime.datetime(2025, 4, 12, 16, 41, 59, 12362), 'remaining': 0}]
+    progress_history: [{'date': datetime.datetime(2025, 4, 11, 0, 0), 'remaining': 10}, {'date': datetime.datetime(2025, 4, 21, 0, 0), 'remaining': 0}]
     remaining_duration: 0
     slack: 0
 
@@ -75,10 +75,10 @@ Upcoming Tasks:
 --------------
 Task 5: T2.2
   Duration: 10 days
-  Start Date: 2025-04-27
+  Start Date: 2025-05-16
   Resources: Green
 
 Task 3: T3
   Duration: 30 days
-  Start Date: 2025-05-07
+  Start Date: 2025-06-04
   Resources: Magenta

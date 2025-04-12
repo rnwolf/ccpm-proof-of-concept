@@ -2214,252 +2214,6 @@ class CCPMScheduler:
             plt.savefig(filename, dpi=300, bbox_inches="tight")
         plt.show()
 
-    def recalculate_network_from_progress(self, status_date):
-        """
-        Recalculate the entire network schedule based on task progress.
-        Enhanced to maintain ALAP positioning of feeding buffers and preserve task state.
-        """
-        # Get topological sort of tasks
-        task_order = list(nx.topological_sort(self.task_graph))
-
-        # Keep track of tasks that have received updates in this recalculation
-        updated_tasks = set()
-
-        # First pass: update task start dates based on progress
-        for node in task_order:
-            # Check if this is a buffer
-            if hasattr(self, "buffers") and node in self.buffers:
-                continue  # Skip buffers in this pass, we'll handle them later
-
-            # Skip if not a task
-            if node not in self.tasks:
-                continue
-
-            task = self.tasks[node]
-
-            # If the task is completed or in progress, handle actual dates
-            if hasattr(task, "status") and task.status in ["completed", "in_progress"]:
-                # Task has started - use actual start date and remaining duration
-                if not hasattr(task, "remaining_duration"):
-                    task.remaining_duration = task.duration  # Default if not set
-
-                # For completed tasks, ensure end date is set
-                if task.status == "completed":
-                    if not hasattr(task, "actual_end_date"):
-                        task.actual_end_date = status_date
-
-                    # IMPORTANT FIX: Use the actual dates for new_start_date and new_end_date
-                    # and always preserve the actual_end_date that was set
-                    task.new_start_date = task.actual_start_date
-                    task.new_end_date = task.actual_end_date
-
-                    # Add to updated tasks set
-                    updated_tasks.add(node)
-                else:
-                    # For in-progress tasks, calculate expected end date
-                    task.new_start_date = task.actual_start_date
-                    task.new_end_date = status_date + timedelta(
-                        days=task.remaining_duration
-                    )
-
-                    # Add to updated tasks set
-                    updated_tasks.add(node)
-            else:
-                # IMPORTANT FIX: Only update not-started tasks if their predecessors have changed
-                # Check if any predecessors have been updated
-                predecessors = list(self.task_graph.predecessors(node))
-
-                # If no predecessors or none of them have been updated, skip this task
-                if not predecessors or not any(
-                    pred in updated_tasks for pred in predecessors
-                ):
-                    # No predecessors updated, keep current schedule
-                    continue
-
-                # Task hasn't started yet - calculate based on predecessors
-                if not predecessors:
-                    # Start task with no predecessors - keep original date if in future
-                    if (
-                        not hasattr(task, "new_start_date")
-                        or task.start_date > status_date
-                    ):
-                        task.new_start_date = task.start_date
-                        task.remaining_duration = task.duration
-                    else:
-                        # Should have started by now but hasn't - update to today
-                        task.new_start_date = status_date
-                        task.remaining_duration = task.duration
-                else:
-                    # Find the latest end date of all predecessors
-                    latest_end = status_date  # Default to today
-
-                    for pred_id in predecessors:
-                        if pred_id in self.tasks:
-                            pred_task = self.tasks[pred_id]
-
-                            # Calculate predecessor end date based on its status
-                            if (
-                                hasattr(pred_task, "status")
-                                and pred_task.status == "completed"
-                            ):
-                                pred_end = pred_task.actual_end_date
-                            elif (
-                                hasattr(pred_task, "status")
-                                and pred_task.status == "in_progress"
-                            ):
-                                # In progress - end date is today + remaining duration
-                                pred_end = status_date + timedelta(
-                                    days=pred_task.remaining_duration
-                                )
-                            elif hasattr(pred_task, "new_end_date"):
-                                # Not started but rescheduled - use new dates
-                                pred_end = pred_task.new_end_date
-                            else:
-                                # Not started or updated - use original schedule
-                                pred_end = pred_task.end_date
-
-                            if pred_end > latest_end:
-                                latest_end = pred_end
-                        elif hasattr(self, "buffers") and pred_id in self.buffers:
-                            # Predecessor is a buffer
-                            buffer = self.buffers[pred_id]
-                            if hasattr(buffer, "new_end_date"):
-                                if buffer.new_end_date > latest_end:
-                                    latest_end = buffer.new_end_date
-
-                    # Set new start date to latest predecessor end
-                    task.new_start_date = latest_end
-                    task.remaining_duration = (
-                        task.duration
-                    )  # Reset to full duration for not-started tasks
-
-                    # Add to updated tasks set since we've changed this task
-                    updated_tasks.add(node)
-
-                # Calculate new end date
-                task.new_end_date = task.new_start_date + timedelta(
-                    days=task.remaining_duration
-                )
-
-        # Only apply resource leveling to tasks that have been updated
-        self._apply_resource_leveling_to_updated_schedule(status_date, updated_tasks)
-
-        # Second pass: update buffer dates and consumption
-        if hasattr(self, "buffers"):
-            for buffer_id, buffer in self.buffers.items():
-                # Get predecessor and successor nodes
-                predecessors = list(self.task_graph.predecessors(buffer_id))
-                successors = list(self.task_graph.successors(buffer_id))
-
-                if not predecessors or not successors:
-                    continue  # Skip if buffer isn't properly connected
-
-                # Get predecessor task
-                pred_id = predecessors[0]
-                if pred_id in self.tasks:
-                    pred_task = self.tasks[pred_id]
-
-                    # Check if predecessor or successor has been updated
-                    if pred_id not in updated_tasks and all(
-                        succ not in updated_tasks for succ in successors
-                    ):
-                        # Skip buffer update if connected tasks haven't changed
-                        continue
-
-                    # Calculate predecessor end date
-                    if hasattr(pred_task, "status") and pred_task.status == "completed":
-                        pred_end = pred_task.actual_end_date
-                    elif (
-                        hasattr(pred_task, "status")
-                        and pred_task.status == "in_progress"
-                    ):
-                        pred_end = status_date + timedelta(
-                            days=pred_task.remaining_duration
-                        )
-                    elif hasattr(pred_task, "new_end_date"):
-                        pred_end = pred_task.new_end_date
-                    else:
-                        pred_end = pred_task.end_date
-
-                    # Get successor task
-                    succ_id = successors[0]
-                    succ_task = None
-                    if succ_id in self.tasks:
-                        succ_task = self.tasks[succ_id]
-
-                    # Handle buffer based on type
-                    if buffer.buffer_type == "project":
-                        # Project buffer comes after the last task in critical chain
-                        buffer.new_start_date = pred_end
-                        buffer.new_end_date = buffer.new_start_date + timedelta(
-                            days=buffer.size
-                        )
-                        buffer.remaining_size = (
-                            buffer.size
-                        )  # Project buffer is always full size
-
-                    elif buffer.buffer_type == "feeding" and succ_task:
-                        # For feeding buffers, maintain ALAP positioning
-                        # Get the expected start of the critical chain task it's protecting
-                        if hasattr(succ_task, "new_start_date"):
-                            critical_start = succ_task.new_start_date
-                        else:
-                            critical_start = succ_task.start_date
-
-                        # Calculate buffer penetration based on actual progress vs. planned
-                        # Buffer is penetrated if the feeding chain is behind schedule
-
-                        # Calculate planned end date of the feeding chain
-                        if hasattr(pred_task, "start_date"):
-                            planned_end = pred_task.start_date + timedelta(
-                                days=pred_task.duration
-                            )
-                        else:
-                            planned_end = pred_task.end_date
-
-                        # Calculate actual/projected end date
-                        actual_end = pred_end
-
-                        # Calculate buffer penetration (how far behind schedule)
-                        if actual_end > planned_end:
-                            days_behind = (actual_end - planned_end).days
-                            buffer_consumed = min(buffer.size, days_behind)
-                        else:
-                            buffer_consumed = 0
-
-                        buffer.remaining_size = max(0, buffer.size - buffer_consumed)
-
-                        # Position buffer ALAP, ending at critical chain task start
-                        buffer.new_end_date = critical_start
-                        buffer.new_start_date = buffer.new_end_date - timedelta(
-                            days=buffer.size
-                        )
-
-                        # If feeding chain ends after buffer should start, mark buffer as fully consumed
-                        if pred_end > buffer.new_start_date:
-                            buffer.remaining_size = 0
-                            # Note: We maintain ALAP positioning even for consumed buffers
-                            # for visualization purposes
-
-                        # Record buffer consumption history
-                        if not hasattr(buffer, "consumption_history"):
-                            buffer.consumption_history = []
-
-                        buffer.consumption_history.append(
-                            {
-                                "date": status_date,
-                                "remaining": buffer.remaining_size,
-                                "position_start": buffer.new_start_date,
-                                "position_end": buffer.new_end_date,
-                            }
-                        )
-
-        # Return updated tasks and buffers
-        return self.tasks, self.buffers if hasattr(self, "buffers") else None
-
-    # Fix for update_task_progress to correctly set the completion date for tasks
-    # This ensures the actual_end_date is properly set to the status date when a task is marked complete
-
     def generate_execution_report(self, status_date=None):
         """
         Generate a text report of the project's execution status with enhanced details about completed tasks.
@@ -2738,10 +2492,14 @@ class CCPMScheduler:
         Args:
             task_id: The ID of the task to update
             remaining_duration: The remaining duration in days (0 means task is complete)
-            status_date: The date of this status update (defaults to today)
+            status_date: The date of this status update (defaults to execution_date)
         """
+        # Default to execution_date
         if status_date is None:
-            status_date = datetime.now()
+            if hasattr(self, "execution_date"):
+                status_date = self.execution_date
+            else:
+                status_date = datetime.now()
 
         if task_id not in self.tasks:
             raise ValueError(f"Task {task_id} not found in the project")
@@ -2755,6 +2513,9 @@ class CCPMScheduler:
         print(
             f"  Planned end: {(task.start_date + timedelta(days=task.duration)).strftime('%Y-%m-%d')}"
         )
+        print(
+            f"  Status update date: {status_date.strftime('%Y-%m-%d')}"
+        )  # Confirm correct date
         if hasattr(task, "status"):
             print(f"  Current status: {task.status}")
         if hasattr(task, "actual_start_date"):
@@ -2763,7 +2524,6 @@ class CCPMScheduler:
             print(f"  Actual end: {task.actual_end_date.strftime('%Y-%m-%d')}")
         if hasattr(task, "remaining_duration"):
             print(f"  Current remaining: {task.remaining_duration}")
-        print(f"  Status update date: {status_date.strftime('%Y-%m-%d')}")
         print(f"  New remaining duration: {remaining_duration}")
 
         # Store the original duration if not already tracking
@@ -2802,7 +2562,7 @@ class CCPMScheduler:
             # Task is now complete
             task.status = "completed"
 
-            # CRITICAL FIX: Set the actual_end_date to the current status_date
+            # CRITICAL FIX: Set the actual_end_date to the status_date parameter, not today
             task.actual_end_date = status_date
 
             # Make sure the task duration is updated to reflect actual duration
@@ -2833,10 +2593,339 @@ class CCPMScheduler:
             print(f"  Remaining: {task.remaining_duration} days")
             print(f"  Expected end: {task.expected_end_date.strftime('%Y-%m-%d')}")
 
-        # Recalculate the network with these changes
-        self.recalculate_network_from_progress(status_date)
+        # Create a set with this task ID as the only directly updated task
+        directly_updated_tasks = {task_id}
+
+        # Recalculate the network with these changes, passing the directly updated tasks
+        self.recalculate_network_from_progress(status_date, directly_updated_tasks)
 
         return task
+
+    def recalculate_network_from_progress(
+        self, status_date, directly_updated_tasks=None
+    ):
+        """
+        Recalculate the entire network schedule based on task progress.
+        Enhanced to maintain expected completion dates for tasks that didn't receive direct updates.
+
+        Args:
+            status_date: Current status date
+            directly_updated_tasks: Set of task IDs that received direct updates in this round
+        """
+        # Initialize directly_updated_tasks if not provided
+        if directly_updated_tasks is None:
+            directly_updated_tasks = set()
+
+        # Get topological sort of tasks
+        task_order = list(nx.topological_sort(self.task_graph))
+
+        # Keep track of tasks that have received updates in this recalculation
+        updated_tasks = set()
+
+        # First pass: update task start dates based on progress
+        for node in task_order:
+            # Check if this is a buffer
+            if hasattr(self, "buffers") and node in self.buffers:
+                continue  # Skip buffers in this pass, we'll handle them later
+
+            # Skip if not a task
+            if node not in self.tasks:
+                continue
+
+            task = self.tasks[node]
+
+            # If the task is completed or in progress, handle actual dates
+            if hasattr(task, "status") and task.status in ["completed", "in_progress"]:
+                # Task has started - use actual start date and remaining duration
+                if not hasattr(task, "remaining_duration"):
+                    task.remaining_duration = task.duration  # Default if not set
+
+                # For completed tasks, ensure end date is set
+                if task.status == "completed":
+                    if not hasattr(task, "actual_end_date"):
+                        task.actual_end_date = status_date
+
+                    # Use the actual dates for new_start_date and new_end_date
+                    task.new_start_date = task.actual_start_date
+                    task.new_end_date = task.actual_end_date
+
+                    # Add to updated tasks set
+                    updated_tasks.add(node)
+                else:
+                    # For in-progress tasks, handle dates
+                    task.new_start_date = task.actual_start_date
+
+                    # IMPORTANT FIX: Only update expected_end_date if this task received a direct update
+                    if node in directly_updated_tasks:
+                        # This task was directly updated, so recalculate expected end date
+                        task.expected_end_date = status_date + timedelta(
+                            days=task.remaining_duration
+                        )
+                        # Update new_end_date to match
+                        task.new_end_date = task.expected_end_date
+                    else:
+                        # This task did not receive a direct update, so maintain its previous expected_end_date
+                        if hasattr(task, "expected_end_date"):
+                            # Use existing expected end date
+                            task.new_end_date = task.expected_end_date
+                        else:
+                            # If no expected_end_date exists yet, initialize it (should rarely happen)
+                            task.expected_end_date = status_date + timedelta(
+                                days=task.remaining_duration
+                            )
+                            task.new_end_date = task.expected_end_date
+
+                    # Add to updated tasks set
+                    updated_tasks.add(node)
+            else:
+                # Task hasn't started yet - calculate based on predecessors
+                predecessors = list(self.task_graph.predecessors(node))
+
+                # If no predecessors or none of them have been updated, skip this task
+                if not predecessors or not any(
+                    pred in updated_tasks for pred in predecessors
+                ):
+                    continue
+
+                # Calculate start based on predecessors
+                if not predecessors:
+                    # Start task with no predecessors - keep original date if in future
+                    if (
+                        not hasattr(task, "new_start_date")
+                        or task.start_date > status_date
+                    ):
+                        task.new_start_date = task.start_date
+                        task.remaining_duration = task.duration
+                    else:
+                        # Should have started by now but hasn't - update to today
+                        task.new_start_date = status_date
+                        task.remaining_duration = task.duration
+                else:
+                    # Find the latest end date of all predecessors
+                    latest_end = status_date  # Default to today
+
+                    for pred_id in predecessors:
+                        if pred_id in self.tasks:
+                            pred_task = self.tasks[pred_id]
+
+                            # Calculate predecessor end date based on its status
+                            if (
+                                hasattr(pred_task, "status")
+                                and pred_task.status == "completed"
+                            ):
+                                pred_end = pred_task.actual_end_date
+                            elif (
+                                hasattr(pred_task, "status")
+                                and pred_task.status == "in_progress"
+                            ):
+                                # In progress - end date is today + remaining duration
+                                pred_end = status_date + timedelta(
+                                    days=pred_task.remaining_duration
+                                )
+                            elif hasattr(pred_task, "new_end_date"):
+                                # Not started but rescheduled - use new dates
+                                pred_end = pred_task.new_end_date
+                            else:
+                                # Not started or updated - use original schedule
+                                pred_end = pred_task.end_date
+
+                            if pred_end > latest_end:
+                                latest_end = pred_end
+                        elif hasattr(self, "buffers") and pred_id in self.buffers:
+                            # Predecessor is a buffer
+                            buffer = self.buffers[pred_id]
+                            if hasattr(buffer, "new_end_date"):
+                                if buffer.new_end_date > latest_end:
+                                    latest_end = buffer.new_end_date
+
+                    # Set new start date to latest predecessor end
+                    task.new_start_date = latest_end
+                    task.remaining_duration = (
+                        task.duration
+                    )  # Reset to full duration for not-started tasks
+
+                    # Add to updated tasks set since we've changed this task
+                    updated_tasks.add(node)
+
+                # Calculate new end date
+                task.new_end_date = task.new_start_date + timedelta(
+                    days=task.remaining_duration
+                )
+
+        # Only apply resource leveling to tasks that have been updated
+        self._apply_resource_leveling_to_updated_schedule(status_date, updated_tasks)
+
+        # NEW APPROACH: Process buffers in topological order to ensure proper sequencing
+        if hasattr(self, "buffers"):
+            # Get all graph nodes in topological order
+            all_nodes_topo = list(nx.topological_sort(self.task_graph))
+
+            # Process only buffer nodes in topological order
+            buffer_nodes = [node for node in all_nodes_topo if node in self.buffers]
+
+            for buffer_id in buffer_nodes:
+                buffer = self.buffers[buffer_id]
+
+                # Get predecessor and successor nodes
+                predecessors = list(self.task_graph.predecessors(buffer_id))
+                successors = list(self.task_graph.successors(buffer_id))
+
+                if not predecessors or not successors:
+                    continue  # Skip if buffer isn't properly connected
+
+                # Get predecessor task
+                pred_id = predecessors[0]
+                if pred_id in self.tasks:
+                    pred_task = self.tasks[pred_id]
+
+                    # Calculate predecessor end date
+                    if hasattr(pred_task, "status") and pred_task.status == "completed":
+                        pred_end = pred_task.actual_end_date
+                    elif (
+                        hasattr(pred_task, "status")
+                        and pred_task.status == "in_progress"
+                    ):
+                        pred_end = status_date + timedelta(
+                            days=pred_task.remaining_duration
+                        )
+                    elif hasattr(pred_task, "new_end_date"):
+                        pred_end = pred_task.new_end_date
+                    else:
+                        pred_end = pred_task.end_date
+
+                    # Get successor task
+                    succ_id = successors[0]
+                    succ_task = None
+                    if succ_id in self.tasks:
+                        succ_task = self.tasks[succ_id]
+
+                    # CRITICAL FIX: Handle feeding buffers properly
+                    if buffer.buffer_type == "feeding" and succ_task:
+                        # For feeding buffers, adjust buffer placement and update successor start time
+
+                        # Position buffer after the feeding chain
+                        buffer.new_start_date = pred_end
+                        buffer.new_end_date = buffer.new_start_date + timedelta(
+                            days=buffer.size
+                        )
+
+                        # CRITICAL: Ensure the successor task starts after the buffer
+                        # This enforces the precedence relationship
+                        if hasattr(succ_task, "new_start_date"):
+                            if succ_task.new_start_date < buffer.new_end_date:
+                                # Need to push the successor task later
+                                succ_task.new_start_date = buffer.new_end_date
+                                succ_task.new_end_date = (
+                                    succ_task.new_start_date
+                                    + timedelta(
+                                        days=getattr(
+                                            succ_task,
+                                            "remaining_duration",
+                                            succ_task.duration,
+                                        )
+                                    )
+                                )
+                                # Mark successor as updated
+                                updated_tasks.add(succ_id)
+                        else:
+                            # Successor hasn't been updated yet, set it now
+                            succ_task.new_start_date = buffer.new_end_date
+                            succ_task.new_end_date = (
+                                succ_task.new_start_date
+                                + timedelta(
+                                    days=getattr(
+                                        succ_task,
+                                        "remaining_duration",
+                                        succ_task.duration,
+                                    )
+                                )
+                            )
+                            # Mark successor as updated
+                            updated_tasks.add(succ_id)
+
+                        # Calculate buffer consumption based on actual progress vs. planned
+                        # Buffer is penetrated if the feeding chain is behind schedule
+
+                        # Calculate planned end date of the feeding chain
+                        if hasattr(pred_task, "start_date"):
+                            planned_end = pred_task.start_date + timedelta(
+                                days=pred_task.duration
+                            )
+                        else:
+                            planned_end = pred_task.end_date
+
+                        # Calculate actual/projected end date
+                        actual_end = pred_end
+
+                        # Calculate buffer penetration (how far behind schedule)
+                        if actual_end > planned_end:
+                            days_behind = (actual_end - planned_end).days
+                            buffer_consumed = min(buffer.size, days_behind)
+                        else:
+                            buffer_consumed = 0
+
+                        buffer.remaining_size = max(0, buffer.size - buffer_consumed)
+
+                        # Record buffer consumption history
+                        if not hasattr(buffer, "consumption_history"):
+                            buffer.consumption_history = []
+
+                        buffer.consumption_history.append(
+                            {
+                                "date": status_date,
+                                "remaining": buffer.remaining_size,
+                                "position_start": buffer.new_start_date,
+                                "position_end": buffer.new_end_date,
+                            }
+                        )
+
+                    # Handle project buffer similarly
+                    elif buffer.buffer_type == "project":
+                        # Project buffer comes after the last task in critical chain
+                        buffer.new_start_date = pred_end
+                        buffer.new_end_date = buffer.new_start_date + timedelta(
+                            days=buffer.size
+                        )
+                        buffer.remaining_size = (
+                            buffer.size
+                        )  # Project buffer is always full size
+
+        # Now that all tasks and buffers are processed, do a final pass to ensure
+        # that no tasks violate buffer dependencies
+        for node in task_order:
+            if node not in self.tasks:
+                continue
+
+            task = self.tasks[node]
+            predecessors = list(self.task_graph.predecessors(node))
+
+            # Check if any predecessors are buffers
+            buffer_predecessors = [p for p in predecessors if p in self.buffers]
+            if buffer_predecessors:
+                latest_buffer_end = None
+
+                for buffer_id in buffer_predecessors:
+                    buffer = self.buffers[buffer_id]
+                    if hasattr(buffer, "new_end_date"):
+                        if (
+                            latest_buffer_end is None
+                            or buffer.new_end_date > latest_buffer_end
+                        ):
+                            latest_buffer_end = buffer.new_end_date
+
+                # If we found buffer end dates, ensure task starts after the latest one
+                if latest_buffer_end and hasattr(task, "new_start_date"):
+                    if task.new_start_date < latest_buffer_end:
+                        # Task needs to be delayed
+                        task.new_start_date = latest_buffer_end
+                        task.new_end_date = task.new_start_date + timedelta(
+                            days=getattr(task, "remaining_duration", task.duration)
+                        )
+                        # Mark as updated
+                        updated_tasks.add(node)
+
+        # Return updated tasks and buffers
+        return self.tasks, self.buffers if hasattr(self, "buffers") else None
 
 
 def create_sample_project():
@@ -2953,7 +3042,7 @@ def create_sample_project():
 
     # Visualize the current status
     scheduler.visualize_schedule("ccpm_gantt_02.png")
-    scheduler.visualize_fever_chart("ccpm_fever_chart_02.png")
+    # scheduler.visualize_fever_chart("ccpm_fever_chart_02.png")
 
     # Set the execution date to today
     current_date = datetime(2025, 4, 21)  # +20 days
@@ -2973,7 +3062,7 @@ def create_sample_project():
 
     # Visualize the current status
     scheduler.visualize_schedule("ccpm_gantt_03.png")
-    scheduler.visualize_fever_chart("ccpm_fever_chart_03.png")
+    # scheduler.visualize_fever_chart("ccpm_fever_chart_03.png")
 
     # Set the execution date to today
     current_date = datetime(2025, 5, 1)  # +30 days
@@ -2994,7 +3083,7 @@ def create_sample_project():
 
     # Visualize the current status
     scheduler.visualize_schedule("ccpm_gantt_04.png")
-    scheduler.visualize_fever_chart("ccpm_fever_chart_04.png")
+    # scheduler.visualize_fever_chart("ccpm_fever_chart_04.png")
 
 
 if __name__ == "__main__":

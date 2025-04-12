@@ -3,9 +3,9 @@ CCPM Project Execution Status Report
 Report Date: 2025-04-11
 Project Start Date: 2025-04-01
 Project Completion: 22.7%
-Projected End Date: 2025-06-11
+Projected End Date: 2025-06-29
 Original End Date: 2025-07-30
-Project is currently 49 days ahead of schedule
+Project is currently 31 days ahead of schedule
 
 Buffer Status:
 -------------
@@ -43,15 +43,15 @@ Upcoming Tasks:
 --------------
 Task 2: T1.2
   Duration: 20 days
-  Start Date: 2025-04-22
+  Start Date: 2025-04-21
+  Resources: Green
+
+Task 5: T2.2
+  Duration: 10 days
+  Start Date: 2025-05-11
   Resources: Green
 
 Task 3: T3
   Duration: 30 days
-  Start Date: 2025-05-12
+  Start Date: 2025-05-30
   Resources: Magenta
-
-Task 5: T2.2
-  Duration: 10 days
-  Start Date: 2025-05-12
-  Resources: Green
