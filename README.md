@@ -1,5 +1,7 @@
 # Proof of concept for a Critical Chain Based planner
 
+graphbased-ccpm.py
+
 ## Get started with proof of concept
 
 1 Clone repo
