@@ -22,6 +22,9 @@ class Buffer:
         self.new_start_date = None
         self.new_end_date = None
 
+        # Notes functionality
+        self.notes = []  # List of timestamped notes
+
     def consume(self, amount, status_date, reason=None):
         """Consume a portion of the buffer"""
         if amount < 0:
@@ -71,3 +74,52 @@ class Buffer:
             if hasattr(self, "new_end_date") and self.new_end_date
             else self.end_date
         )
+
+    def add_note(self, text, date=None):
+        """
+        Add a timestamped note to the buffer.
+
+        Args:
+            text: Note text
+            date: Date of the note (defaults to now)
+
+        Returns:
+            dict: The added note
+        """
+        if date is None:
+            date = datetime.now()
+
+        note = {"date": date, "text": text}
+
+        self.notes.append(note)
+        return note
+
+    def get_notes(self, start_date=None, end_date=None):
+        """
+        Get notes, optionally filtered by date range.
+
+        Args:
+            start_date: Filter notes on or after this date
+            end_date: Filter notes on or before this date
+
+        Returns:
+            list: Filtered notes
+        """
+        if start_date is None and end_date is None:
+            return self.notes.copy()
+
+        filtered_notes = []
+
+        for note in self.notes:
+            include = True
+
+            if start_date and note["date"] < start_date:
+                include = False
+
+            if end_date and note["date"] > end_date:
+                include = False
+
+            if include:
+                filtered_notes.append(note)
+
+        return filtered_notes

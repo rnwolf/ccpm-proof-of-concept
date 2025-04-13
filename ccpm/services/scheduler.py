@@ -17,6 +17,13 @@ from .buffer_strategies import (
     AdaptiveBufferMethod,
 )
 
+from ..utils.tag_utils import (
+    get_all_tags,
+    refresh_all_tags,
+    get_resources_by_tags,
+    get_tasks_by_tags,
+)
+
 
 class CCPMScheduler:
     def __init__(
@@ -25,7 +32,9 @@ class CCPMScheduler:
         default_feeding_buffer_ratio=0.3,
         project_buffer_strategy=None,
         default_feeding_buffer_strategy=None,
+        allow_resource_overallocation=False,
     ):
+        self.allow_resource_overallocation = allow_resource_overallocation  # Allow over allocation and report on it with a view to topping up capacity
         self.tasks = {}  # Dictionary of Task objects
         self.chains = {}  # Dictionary of Chain objects
         self.buffers = {}  # Dictionary of Buffer objects
@@ -417,31 +426,6 @@ class CCPMScheduler:
                 # Recursively propagate to downstream tasks
                 self._propagate_delay(succ_id)
 
-    def update_task_progress(self, task_id, remaining_duration, status_date=None):
-        """Update task progress with remaining duration"""
-        # Default to current date
-        if status_date is None:
-            status_date = datetime.now()
-
-        if task_id not in self.tasks:
-            raise ValueError(f"Task {task_id} not found")
-
-        task = self.tasks[task_id]
-
-        # If this is the first update, set the actual start date
-        if task.status == "planned":
-            task.start_task(status_date)
-
-        # Update the task progress
-        task.update_progress(remaining_duration, status_date)
-
-        # If task is now complete, we need to update the schedule
-        if task.status == "completed":
-            # Propagate changes to downstream tasks
-            self._recalculate_schedule_from_progress(status_date)
-
-        return task
-
     def _recalculate_schedule_from_progress(self, status_date):
         """Recalculate the schedule based on current progress"""
         # This would be a more complex implementation that:
@@ -486,3 +470,195 @@ class CCPMScheduler:
                     buffer.consume(delay_days, status_date, "Critical chain delay")
 
         return self.buffers
+
+    def update_task_progress(self, task_id, remaining_duration, status_date=None):
+        """Update task progress with remaining duration"""
+        # Default to current date
+        if status_date is None:
+            status_date = datetime.now()
+
+        if task_id not in self.tasks:
+            raise ValueError(f"Task {task_id} not found")
+
+        task = self.tasks[task_id]
+        prev_status = task.status
+
+        # If this is the first update, set the actual start date
+        if task.status == "planned":
+            task.start_task(status_date)
+
+            # Record arrival for each resource assigned to this task
+            for resource_id in self.get_task_resources(task_id):
+                if resource_id in self.resources:
+                    self.resources[resource_id].record_arrival(task_id, status_date)
+
+        # Update the task progress
+        task.update_progress(remaining_duration, status_date)
+
+        # If task is now complete, record departure for each resource
+        if task.status == "completed" and prev_status != "completed":
+            for resource_id in self.get_task_resources(task_id):
+                if resource_id in self.resources:
+                    self.resources[resource_id].record_departure(task_id, status_date)
+
+        # Recalculate schedule based on progress
+        self._recalculate_schedule_from_progress(status_date)
+
+        return task
+
+    def get_cumulative_flow_diagram(self, resource_id, start_date, end_date):
+        """Generate cumulative flow diagram data for a specific resource"""
+        if resource_id not in self.resources:
+            raise ValueError(f"Resource {resource_id} not found")
+
+        return self.resources[resource_id].get_cumulative_flow_data(
+            start_date, end_date
+        )
+
+    def identify_constraint_resources(self, start_date, end_date):
+        """Identify potential constraint resources by analyzing flow balance"""
+        constraints = []
+
+        for resource_id, resource in self.resources.items():
+            flow_analysis = resource.analyze_flow_balance(start_date, end_date)
+
+            # Consider as potential constraint if:
+            # 1. Flow is not balanced (arrivals > departures)
+            # 2. WIP is increasing
+            if (
+                not flow_analysis["is_balanced"]
+                and flow_analysis["arrival_rate"] > flow_analysis["departure_rate"]
+                and flow_analysis["wip_trend"] == "increasing"
+            ):
+                constraints.append(
+                    {
+                        "resource_id": resource_id,
+                        "resource_name": resource.name,
+                        "arrival_rate": flow_analysis["arrival_rate"],
+                        "departure_rate": flow_analysis["departure_rate"],
+                        "imbalance": flow_analysis["arrival_rate"]
+                        - flow_analysis["departure_rate"],
+                    }
+                )
+
+        # Sort by degree of imbalance (most constrained first)
+        constraints.sort(key=lambda x: x["imbalance"], reverse=True)
+
+        return constraints
+
+    def _update_resource_planned_assignments(self, task_id=None):
+        """
+        Update resource assignment plans after scheduling
+
+        Args:
+            task_id: Specific task to update (None to update all)
+        """
+        tasks_to_update = [task_id] if task_id else list(self.tasks.keys())
+
+        for current_task_id in tasks_to_update:
+            if current_task_id not in self.tasks:
+                continue
+
+            task = self.tasks[current_task_id]
+
+            # Skip completed tasks
+            if hasattr(task, "status") and task.status == "completed":
+                continue
+
+            # Get task's resources
+            resources_list = []
+            if isinstance(task.resources, list):
+                resources_list = task.resources
+            elif isinstance(task.resources, str):
+                resources_list = [task.resources]
+
+            # Get task's start and end dates
+            if task.status == "in_progress":
+                start_date = task.actual_start_date
+                end_date = task.expected_end_date or task.new_end_date
+            else:
+                start_date = task.new_start_date or task.start_date
+                end_date = task.new_end_date or task.end_date
+
+            # Update planned assignments for each resource
+            for resource_id in resources_list:
+                if resource_id in self.resources:
+                    self.resources[resource_id].update_planned_assignment(
+                        current_task_id, start_date, end_date
+                    )
+
+    def get_all_project_tags(self):
+        """Get all tags used in this project"""
+        return get_all_tags(self)
+
+    def get_resources_by_tags(self, tags, match_all=True):
+        """Get resources that match the specified tags"""
+        return get_resources_by_tags(self.resources, tags, match_all)
+
+    def get_tasks_by_tags(self, tags, match_all=True):
+        """Get tasks that match the specified tags"""
+        return get_tasks_by_tags(self.tasks, tags, match_all)
+
+    def set_task_full_kitted(self, task_id, is_kitted=True, date=None, note=None):
+        """
+        Set the full kitted status of a task.
+
+        Args:
+            task_id: ID of the task to update
+            is_kitted: Whether the task is full kitted
+            date: Date of the status change (defaults to now)
+            note: Optional note about the status change
+
+        Returns:
+            bool: True if successful, False if task not found
+        """
+        if task_id not in self.tasks:
+            return False
+
+        self.tasks[task_id].set_full_kitted(is_kitted, date, note)
+        return True
+
+    def get_full_kitted_tasks(self):
+        """
+        Get all tasks that are marked as full kitted.
+
+        Returns:
+            dict: Dictionary of full kitted tasks keyed by ID
+        """
+        return {
+            task_id: task for task_id, task in self.tasks.items() if task.is_full_kitted
+        }
+
+    def add_task_note(self, task_id, note_text, date=None):
+        """
+        Add a note to a task.
+
+        Args:
+            task_id: ID of the task
+            note_text: Text of the note
+            date: Date of the note (defaults to now)
+
+        Returns:
+            dict: The added note, or None if task not found
+        """
+        if task_id not in self.tasks:
+            return None
+
+        return self.tasks[task_id].add_note(note_text, date)
+
+    def add_buffer_note(self, buffer_id, note_text, date=None):
+        """
+        Add a note to a buffer.
+
+        Args:
+            buffer_id: ID of the buffer
+            note_text: Text of the note
+            date: Date of the note (defaults to now)
+
+        Returns:
+            dict: The added note, or None if buffer not found
+        """
+        if buffer_id not in self.buffers:
+            return None
+
+        return self.buffers[buffer_id].add_note(note_text, date)

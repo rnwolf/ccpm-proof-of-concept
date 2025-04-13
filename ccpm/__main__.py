@@ -8,7 +8,7 @@ A Critical Chain Project Management implementation in Python.
 import argparse
 import sys
 from datetime import datetime
-from .examples.simple_project import create_sample_project
+from ccpm.examples.simple_project import create_sample_project
 
 
 def main():
