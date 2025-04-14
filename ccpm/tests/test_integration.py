@@ -3,6 +3,11 @@ from datetime import datetime, timedelta
 from ccpm.domain.task import Task
 from ccpm.services.scheduler import CCPMScheduler
 
+import sys
+import os
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+
 
 class CCPMIntegrationTest(unittest.TestCase):
     def setUp(self):

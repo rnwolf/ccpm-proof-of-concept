@@ -332,3 +332,27 @@ The examples demonstrate how to use the new features:
 * Track flow events by calling the appropriate resource methods when tasks start or complete
 * Provide visualization methods for cumulative flow diagrams
 * Identify constraint resources by analyzing flow balance across all resources
+
+
+## Run Tests
+
+Run Tests from Project Root.
+You can run the tests from the project root directory, which sometimes helps Python find the modules:
+
+Navigate to project root (where the ccpm folder is)
+`cd path\to\your\project`
+
+### Run the test using the module path
+python -m ccpm.tests.test_tasks
+python -m ccpm.tests.test_integration
+
+
+### Install the Package in Development Mode before running tests
+
+The most reliable way to run the tests is to install the package in development mode. This will make the ccpm module available to Python regardless of your current working directory.
+
+Navigate to the root directory of your project (where the main ccpm folder is located, not inside it)
+
+`pip install -e .`
+
+This requires that you have a setup.py file in your project root.

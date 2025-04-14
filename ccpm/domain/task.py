@@ -7,6 +7,7 @@ class TaskStatus(Enum):
     """
     Enum representing the possible status values of a task.
     """
+
     PLANNED = "planned"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
@@ -18,6 +19,7 @@ class ChainType(Enum):
     """
     Enum representing the type of chain a task belongs to.
     """
+
     NONE = "none"
     CRITICAL = "critical"
     FEEDING = "feeding"
@@ -25,8 +27,8 @@ class ChainType(Enum):
 
 class TaskError(Exception):
     """Exception raised for errors in the Task class."""
-    pass
 
+    pass
 
 
 class Task:
@@ -46,7 +48,7 @@ class Task:
         dependencies: Optional[List] = None,
         resources: Optional[Union[List[str], str]] = None,
         tags: Optional[List[str]] = None,
-        description: str = ""
+        description: str = "",
     ):
         """
         Initialize a new Task.
@@ -73,15 +75,23 @@ class Task:
             raise TaskError("Task name must be a non-empty string")
         self.name = name
 
-        if not isinstance(aggressive_duration, (int, float)) or aggressive_duration <= 0:
+        if (
+            not isinstance(aggressive_duration, (int, float))
+            or aggressive_duration <= 0
+        ):
             raise TaskError("Aggressive duration must be a positive number")
         self.aggressive_duration = float(aggressive_duration)
 
         # Set default safe duration if not provided
         if safe_duration is None:
             self.safe_duration = self.aggressive_duration * 1.5
-        elif not isinstance(safe_duration, (int, float)) or safe_duration < aggressive_duration:
-            raise TaskError("Safe duration must be a number greater than or equal to aggressive duration")
+        elif (
+            not isinstance(safe_duration, (int, float))
+            or safe_duration < aggressive_duration
+        ):
+            raise TaskError(
+                "Safe duration must be a number greater than or equal to aggressive duration"
+            )
         else:
             self.safe_duration = float(safe_duration)
 
@@ -107,7 +117,9 @@ class Task:
         self.description = description
 
         # Schedule attributes
-        self.planned_duration = self.aggressive_duration  # Default to aggressive duration
+        self.planned_duration = (
+            self.aggressive_duration
+        )  # Default to aggressive duration
         self.early_start = None
         self.early_finish = None
         self.late_start = None
@@ -117,9 +129,9 @@ class Task:
         # Execution attributes
         self._status = TaskStatus.PLANNED
         self.start_date = None  # Original planned start
-        self.end_date = None    # Original planned end
+        self.end_date = None  # Original planned end
         self.new_start_date = None  # Updated planned start
-        self.new_end_date = None    # Updated planned end
+        self.new_end_date = None  # Updated planned end
         self.actual_start_date = None
         self.actual_end_date = None
 
@@ -181,11 +193,15 @@ class Task:
                 self._chain_type = ChainType(value)
             except ValueError:
                 valid_types = [t.value for t in ChainType]
-                raise TaskError(f"Invalid chain type: {value}. Must be one of {valid_types}")
+                raise TaskError(
+                    f"Invalid chain type: {value}. Must be one of {valid_types}"
+                )
         elif isinstance(value, ChainType):
             self._chain_type = value
         else:
-            raise TaskError(f"Chain type must be a string or ChainType enum, got {type(value)}")
+            raise TaskError(
+                f"Chain type must be a string or ChainType enum, got {type(value)}"
+            )
 
     @property
     def color(self) -> str:
@@ -253,7 +269,7 @@ class Task:
             raise TaskError("Opacity must be a number between 0 and 1")
         self._opacity = float(value)
 
-    def start_task(self, start_date: datetime) -> 'Task':
+    def start_task(self, start_date: datetime) -> "Task":
         """
         Mark task as started on the given date.
 
@@ -267,7 +283,9 @@ class Task:
             TaskError: If task is already started or completed
         """
         if self._status != TaskStatus.PLANNED and self._status != TaskStatus.ON_HOLD:
-            raise TaskError(f"Cannot start task {self.id} as it is already {self._status.value}")
+            raise TaskError(
+                f"Cannot start task {self.id} as it is already {self._status.value}"
+            )
 
         if not isinstance(start_date, datetime):
             raise TaskError("Start date must be a datetime object")
@@ -287,13 +305,17 @@ class Task:
         self._add_to_progress_history(
             status_date=start_date,
             remaining=self.remaining_duration,
-            status_change="started"
+            status_change="started",
         )
 
         return self
 
-    def update_progress(self, remaining_duration: float, status_date: datetime,
-                       completed_percentage: float = None) -> 'Task':
+    def update_progress(
+        self,
+        remaining_duration: float,
+        status_date: datetime,
+        completed_percentage: float = None,
+    ) -> "Task":
         """
         Update task progress with remaining duration.
 
@@ -309,7 +331,9 @@ class Task:
             TaskError: If task is not in progress or invalid values are provided
         """
         if self._status != TaskStatus.IN_PROGRESS:
-            raise TaskError(f"Cannot update progress for task {self.id} as it is {self._status.value}")
+            raise TaskError(
+                f"Cannot update progress for task {self.id} as it is {self._status.value}"
+            )
 
         if not isinstance(status_date, datetime):
             raise TaskError("Status date must be a datetime object")
@@ -329,13 +353,21 @@ class Task:
 
         # Calculate completion percentage
         if completed_percentage is not None:
-            if not isinstance(completed_percentage, (int, float)) or completed_percentage < 0 or completed_percentage > 100:
-                raise TaskError("Completion percentage must be a number between 0 and 100")
+            if (
+                not isinstance(completed_percentage, (int, float))
+                or completed_percentage < 0
+                or completed_percentage > 100
+            ):
+                raise TaskError(
+                    "Completion percentage must be a number between 0 and 100"
+                )
             completion_percentage = completed_percentage
         else:
             if self.original_duration > 0:
                 completed_work = self.original_duration - self.remaining_duration
-                completion_percentage = min(100, (completed_work / self.original_duration * 100))
+                completion_percentage = min(
+                    100, (completed_work / self.original_duration * 100)
+                )
             else:
                 completion_percentage = 0
 
@@ -348,7 +380,7 @@ class Task:
             status_date=status_date,
             remaining=self.remaining_duration,
             previous_remaining=previous_remaining,
-            progress_percentage=completion_percentage
+            progress_percentage=completion_percentage,
         )
 
         # If remaining duration is 0, mark as completed
@@ -357,7 +389,7 @@ class Task:
 
         return self
 
-    def complete_task(self, completion_date: datetime) -> 'Task':
+    def complete_task(self, completion_date: datetime) -> "Task":
         """
         Mark task as completed on the given date.
 
@@ -392,12 +424,12 @@ class Task:
             status_date=completion_date,
             remaining=0,
             progress_percentage=100,
-            status_change="completed"
+            status_change="completed",
         )
 
         return self
 
-    def pause_task(self, pause_date: datetime, reason: str = None) -> 'Task':
+    def pause_task(self, pause_date: datetime, reason: str = None) -> "Task":
         """
         Mark task as on hold.
 
@@ -412,7 +444,9 @@ class Task:
             TaskError: If task is not in progress
         """
         if self._status != TaskStatus.IN_PROGRESS:
-            raise TaskError(f"Cannot pause task {self.id} as it is {self._status.value}")
+            raise TaskError(
+                f"Cannot pause task {self.id} as it is {self._status.value}"
+            )
 
         self.status = "on_hold"
 
@@ -421,12 +455,12 @@ class Task:
             status_date=pause_date,
             remaining=self.remaining_duration,
             status_change="paused",
-            note=reason
+            note=reason,
         )
 
         return self
 
-    def resume_task(self, resume_date: datetime) -> 'Task':
+    def resume_task(self, resume_date: datetime) -> "Task":
         """
         Resume a paused task.
 
@@ -448,12 +482,12 @@ class Task:
         self._add_to_progress_history(
             status_date=resume_date,
             remaining=self.remaining_duration,
-            status_change="resumed"
+            status_change="resumed",
         )
 
         return self
 
-    def cancel_task(self, cancel_date: datetime, reason: str = None) -> 'Task':
+    def cancel_task(self, cancel_date: datetime, reason: str = None) -> "Task":
         """
         Mark task as cancelled.
 
@@ -472,7 +506,7 @@ class Task:
             status_date=cancel_date,
             remaining=self.remaining_duration,
             status_change=f"cancelled (was {prev_status})",
-            note=reason
+            note=reason,
         )
 
         return self
@@ -540,7 +574,9 @@ class Task:
         if self._status == TaskStatus.COMPLETED and self.actual_end_date:
             # For completed tasks
             planned_end = self.start_date + timedelta(days=self.planned_duration)
-            return (planned_end - self.actual_end_date).total_seconds() / 86400  # Convert to days
+            return (
+                planned_end - self.actual_end_date
+            ).total_seconds() / 86400  # Convert to days
         else:
             # For in-progress tasks
             planned_progress = min(self.planned_duration, self.get_elapsed_duration())
@@ -554,7 +590,10 @@ class Task:
         Returns:
             datetime: The effective start date
         """
-        if self._status in [TaskStatus.IN_PROGRESS, TaskStatus.COMPLETED] and self.actual_start_date:
+        if (
+            self._status in [TaskStatus.IN_PROGRESS, TaskStatus.COMPLETED]
+            and self.actual_start_date
+        ):
             return self.actual_start_date
         elif hasattr(self, "new_start_date") and self.new_start_date:
             return self.new_start_date
@@ -586,7 +625,11 @@ class Task:
             return self.new_end_date
         elif hasattr(self, "end_date") and self.end_date:
             return self.end_date
-        elif hasattr(self, "start_date") and self.start_date and hasattr(self, "planned_duration"):
+        elif (
+            hasattr(self, "start_date")
+            and self.start_date
+            and hasattr(self, "planned_duration")
+        ):
             return self.start_date + timedelta(days=self.planned_duration)
 
         return None
@@ -627,23 +670,29 @@ class Task:
             return True
 
         # Check if behind schedule for in-progress tasks
-        if (self._status == TaskStatus.IN_PROGRESS and
-            hasattr(self, "planned_duration") and
-            hasattr(self, "remaining_duration")):
+        if (
+            self._status == TaskStatus.IN_PROGRESS
+            and hasattr(self, "planned_duration")
+            and hasattr(self, "remaining_duration")
+        ):
             elapsed = (datetime.now() - self.actual_start_date).days
             planned_progress = elapsed / self.planned_duration
-            actual_progress = (self.planned_duration - self.remaining_duration) / self.planned_duration
+            actual_progress = (
+                self.planned_duration - self.remaining_duration
+            ) / self.planned_duration
             return actual_progress < planned_progress * 0.9  # 10% buffer
 
         # Check if completed late
-        if (self._status == TaskStatus.COMPLETED and
-            hasattr(self, "end_date") and
-            hasattr(self, "actual_end_date")):
+        if (
+            self._status == TaskStatus.COMPLETED
+            and hasattr(self, "end_date")
+            and hasattr(self, "actual_end_date")
+        ):
             return self.actual_end_date > self.end_date
 
         return False
 
-    def add_tag(self, tag: str) -> 'Task':
+    def add_tag(self, tag: str) -> "Task":
         """
         Add a tag to this task if it doesn't already exist.
 
@@ -707,7 +756,9 @@ class Task:
         else:
             return any(tag in self.tags for tag in tags)
 
-    def set_full_kitted(self, is_kitted: bool, date: Optional[datetime] = None, note: str = None) -> 'Task':
+    def set_full_kitted(
+        self, is_kitted: bool, date: Optional[datetime] = None, note: str = None
+    ) -> "Task":
         """
         Mark the task as full kitted or not full kitted.
 
@@ -768,7 +819,9 @@ class Task:
 
         return note
 
-    def get_notes(self, start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> List[Dict]:
+    def get_notes(
+        self, start_date: Optional[datetime] = None, end_date: Optional[datetime] = None
+    ) -> List[Dict]:
         """
         Get notes, optionally filtered by date range.
 
@@ -804,7 +857,7 @@ class Task:
 
         return filtered_notes
 
-    def set_schedule(self, start_date: datetime, duration: float = None) -> 'Task':
+    def set_schedule(self, start_date: datetime, duration: float = None) -> "Task":
         """
         Set the planned schedule for the task.
 
@@ -833,7 +886,9 @@ class Task:
 
         return self
 
-    def update_schedule(self, start_date: datetime = None, duration: float = None) -> 'Task':
+    def update_schedule(
+        self, start_date: datetime = None, duration: float = None
+    ) -> "Task":
         """
         Update the planned schedule.
 
@@ -876,9 +931,15 @@ class Task:
 
         return self
 
-    def _add_to_progress_history(self, status_date: datetime, remaining: float,
-                                previous_remaining: float = None, progress_percentage: float = None,
-                                status_change: str = None, note: str = None) -> None:
+    def _add_to_progress_history(
+        self,
+        status_date: datetime,
+        remaining: float,
+        previous_remaining: float = None,
+        progress_percentage: float = None,
+        status_change: str = None,
+        note: str = None,
+    ) -> None:
         """
         Add an entry to the progress history.
 
@@ -899,16 +960,22 @@ class Task:
             elapsed_days = max(0, (status_date - self.actual_start_date).days)
 
         # Calculate progress percentage if not provided
-        if progress_percentage is None and hasattr(self, "original_duration") and self.original_duration > 0:
+        if (
+            progress_percentage is None
+            and hasattr(self, "original_duration")
+            and self.original_duration > 0
+        ):
             completed = self.original_duration - remaining
-            progress_percentage = min(100, max(0, (completed / self.original_duration * 100)))
+            progress_percentage = min(
+                100, max(0, (completed / self.original_duration * 100))
+            )
 
         # Create history entry
         entry = {
             "date": status_date,
             "remaining": remaining,
             "elapsed_days": elapsed_days,
-            "status": self.status
+            "status": self.status,
         }
 
         # Add optional fields if provided
@@ -954,10 +1021,10 @@ class Task:
             "status": self.status,
             "is_critical": self.is_critical(),
             "is_feeding": self.is_feeding_chain(),
-            "is_delayed": self.is_delayed()
+            "is_delayed": self.is_delayed(),
         }
 
-    def reset_visual_properties(self) -> 'Task':
+    def reset_visual_properties(self) -> "Task":
         """
         Reset all visual properties to their default values.
 
@@ -970,8 +1037,13 @@ class Task:
         self._opacity = None
         return self
 
-    def set_visual_properties(self, color: str = None, border_color: str = None,
-                              pattern: str = None, opacity: float = None) -> 'Task':
+    def set_visual_properties(
+        self,
+        color: str = None,
+        border_color: str = None,
+        pattern: str = None,
+        opacity: float = None,
+    ) -> "Task":
         """
         Set multiple visual properties at once.
 
@@ -1020,17 +1092,30 @@ class Task:
             "chain_type": self.chain_type,
             "is_full_kitted": self.is_full_kitted,
             "remaining_duration": self.remaining_duration,
-            "progress_percentage": self.get_progress_percentage()
+            "progress_percentage": self.get_progress_percentage(),
         }
 
         # Add dates if available
-        for attr in ["start_date", "end_date", "new_start_date", "new_end_date",
-                    "actual_start_date", "actual_end_date", "full_kitted_date"]:
+        for attr in [
+            "start_date",
+            "end_date",
+            "new_start_date",
+            "new_end_date",
+            "actual_start_date",
+            "actual_end_date",
+            "full_kitted_date",
+        ]:
             if hasattr(self, attr) and getattr(self, attr) is not None:
                 result[attr] = getattr(self, attr)
 
         # Add scheduling attributes if available
-        for attr in ["early_start", "early_finish", "late_start", "late_finish", "slack"]:
+        for attr in [
+            "early_start",
+            "early_finish",
+            "late_start",
+            "late_finish",
+            "slack",
+        ]:
             if hasattr(self, attr) and getattr(self, attr) is not None:
                 result[attr] = getattr(self, attr)
 
@@ -1040,7 +1125,7 @@ class Task:
         return result
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'Task':
+    def from_dict(cls, data: Dict[str, Any]) -> "Task":
         """
         Create a task from a dictionary representation.
 
@@ -1059,7 +1144,7 @@ class Task:
             dependencies=data.get("dependencies", []),
             resources=data.get("resources", []),
             tags=data.get("tags", []),
-            description=data.get("description", "")
+            description=data.get("description", ""),
         )
 
         # Set additional attributes
@@ -1082,13 +1167,26 @@ class Task:
             task.remaining_duration = data["remaining_duration"]
 
         # Set dates if available
-        for attr in ["start_date", "end_date", "new_start_date", "new_end_date",
-                    "actual_start_date", "actual_end_date", "full_kitted_date"]:
+        for attr in [
+            "start_date",
+            "end_date",
+            "new_start_date",
+            "new_end_date",
+            "actual_start_date",
+            "actual_end_date",
+            "full_kitted_date",
+        ]:
             if attr in data:
                 setattr(task, attr, data[attr])
 
         # Set scheduling attributes if available
-        for attr in ["early_start", "early_finish", "late_start", "late_finish", "slack"]:
+        for attr in [
+            "early_start",
+            "early_finish",
+            "late_start",
+            "late_finish",
+            "slack",
+        ]:
             if attr in data:
                 setattr(task, attr, data[attr])
 
@@ -1099,12 +1197,12 @@ class Task:
                 color=visual.get("color"),
                 border_color=visual.get("border_color"),
                 pattern=visual.get("pattern"),
-                opacity=visual.get("opacity")
+                opacity=visual.get("opacity"),
             )
 
         return task
 
-    def copy(self) -> 'Task':
+    def copy(self) -> "Task":
         """
         Create a deep copy of this task.
 
@@ -1127,5 +1225,3 @@ class Task:
             progress_str = f", progress={self.get_progress_percentage():.1f}%"
 
         return f"Task(id={self.id}, name={self.name}, duration={self.planned_duration}{status_str}{chain_str}{progress_str})"
-        """
-        Get visual properties
