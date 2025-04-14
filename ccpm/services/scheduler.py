@@ -332,10 +332,16 @@ class CCPMScheduler:
     def set_task_dates(self):
         """Set actual calendar dates for all tasks and buffers"""
         for task_id, task in self.tasks.items():
-            if not hasattr(task, "start_date"):
+            # Make sure early_start is set
+            if not hasattr(task, "early_start") or task.early_start is None:
+                task.early_start = 0  # Default to starting at project start
+
+            # Set start date if not already set
+            if not hasattr(task, "start_date") or task.start_date is None:
                 task.start_date = self.start_date + timedelta(days=task.early_start)
 
-            if not hasattr(task, "end_date"):
+            # Set end date if not already set
+            if not hasattr(task, "end_date") or task.end_date is None:
                 task.end_date = task.start_date + timedelta(days=task.planned_duration)
 
         # Set buffer dates
@@ -351,7 +357,10 @@ class CCPMScheduler:
 
                     # Set buffer dates
                     buffer.start_date = last_task.end_date
-                    buffer.end_date = buffer.start_date + timedelta(days=buffer.size)
+                    if buffer.start_date:  # Add this check to avoid None + timedelta
+                        buffer.end_date = buffer.start_date + timedelta(
+                            days=buffer.size
+                        )
 
             elif buffer.buffer_type == "feeding" and buffer.connected_to:
                 # Find the feeding chain this buffer belongs to
@@ -381,17 +390,23 @@ class CCPMScheduler:
 
                     # Position buffer between feeding chain and critical task
                     buffer.start_date = last_feeding_task.end_date
-                    buffer.end_date = buffer.start_date + timedelta(days=buffer.size)
 
-                    # If buffer pushes critical task later, adjust critical task
-                    if buffer.end_date > critical_task.start_date:
-                        critical_task.start_date = buffer.end_date
-                        critical_task.end_date = critical_task.start_date + timedelta(
-                            days=critical_task.planned_duration
+                    # Add this check to avoid None + timedelta
+                    if buffer.start_date:
+                        buffer.end_date = buffer.start_date + timedelta(
+                            days=buffer.size
                         )
 
-                        # Propagate the delay to downstream tasks
-                        self._propagate_delay(critical_task_id)
+                        # If buffer pushes critical task later, adjust critical task
+                        if buffer.end_date > critical_task.start_date:
+                            critical_task.start_date = buffer.end_date
+                            critical_task.end_date = (
+                                critical_task.start_date
+                                + timedelta(days=critical_task.planned_duration)
+                            )
+
+                            # Propagate the delay to downstream tasks
+                            self._propagate_delay(critical_task_id)
 
         return self.tasks
 
@@ -617,6 +632,30 @@ class CCPMScheduler:
 
         self.tasks[task_id].set_full_kitted(is_kitted, date, note)
         return True
+
+    def get_task_resources(self, task_id):
+        """
+        Get the resources assigned to a task.
+
+        Args:
+            task_id: ID of the task
+
+        Returns:
+            list: List of resource IDs assigned to the task
+        """
+        if task_id not in self.tasks:
+            return []
+
+        task = self.tasks[task_id]
+
+        # Handle different ways resources might be stored
+        if hasattr(task, "resources"):
+            if isinstance(task.resources, list):
+                return task.resources
+            elif isinstance(task.resources, str):
+                return [task.resources]
+
+        return []
 
     def get_full_kitted_tasks(self):
         """

@@ -143,7 +143,7 @@ class Task:
         self._color = None
         self._border_color = None
         self._pattern = None
-        self._opacity = 1.0
+        self._opacity = None
 
         # Chain membership
         self._chain_id = None
@@ -386,6 +386,7 @@ class Task:
         # If remaining duration is 0, mark as completed
         if self.remaining_duration <= 0:
             self.complete_task(status_date)
+            # Don't add another history entry, as complete_task will detect it was called from here
 
         return self
 
@@ -405,9 +406,10 @@ class Task:
         if self._status == TaskStatus.COMPLETED:
             raise TaskError(f"Task {self.id} is already marked as completed")
 
-        if not isinstance(completion_date, datetime):
-            raise TaskError("Completion date must be a datetime object")
+        # Record previous status before changing it
+        previous_status = self._status
 
+        # Update task state
         self.status = "completed"
         self.actual_end_date = completion_date
         self.remaining_duration = 0
@@ -419,13 +421,15 @@ class Task:
             # Ensure minimum of 0 days
             self.actual_duration = max(0, self.actual_duration)
 
-        # Add to progress history
-        self._add_to_progress_history(
-            status_date=completion_date,
-            remaining=0,
-            progress_percentage=100,
-            status_change="completed",
-        )
+        # Only add to progress history if not already in progress
+        # This prevents duplicate entries when called from update_progress
+        if previous_status != TaskStatus.IN_PROGRESS:
+            self._add_to_progress_history(
+                status_date=completion_date,
+                remaining=0,
+                progress_percentage=100,
+                status_change="completed",
+            )
 
         return self
 
@@ -659,37 +663,36 @@ class Task:
         Returns:
             bool: True if the task is delayed
         """
+        # Always return False for planned tasks
         if self._status == TaskStatus.PLANNED:
             return False
 
-        if not hasattr(self, "start_date") or not self.actual_start_date:
-            return False
-
-        # Check if started late
-        if self.actual_start_date > self.start_date:
-            return True
-
-        # Check if behind schedule for in-progress tasks
+        # Check for delayed start
         if (
-            self._status == TaskStatus.IN_PROGRESS
-            and hasattr(self, "planned_duration")
-            and hasattr(self, "remaining_duration")
+            hasattr(self, "start_date")
+            and hasattr(self, "actual_start_date")
+            and self.start_date is not None
+            and self.actual_start_date is not None
         ):
-            elapsed = (datetime.now() - self.actual_start_date).days
-            planned_progress = elapsed / self.planned_duration
-            actual_progress = (
-                self.planned_duration - self.remaining_duration
-            ) / self.planned_duration
-            return actual_progress < planned_progress * 0.9  # 10% buffer
+            if self.actual_start_date > self.start_date:
+                return True
 
-        # Check if completed late
-        if (
-            self._status == TaskStatus.COMPLETED
-            and hasattr(self, "end_date")
-            and hasattr(self, "actual_end_date")
-        ):
-            return self.actual_end_date > self.end_date
+        # Check for delayed completion
+        if self._status == TaskStatus.COMPLETED:
+            if (
+                hasattr(self, "start_date")
+                and hasattr(self, "planned_duration")
+                and hasattr(self, "actual_end_date")
+                and self.start_date is not None
+                and self.actual_end_date is not None
+            ):
+                # Calculate planned end date
+                planned_end = self.start_date + timedelta(days=self.planned_duration)
+                # Check if actual end date is later than planned end date
+                if self.actual_end_date > planned_end:
+                    return True
 
+        # Default case - not delayed
         return False
 
     def add_tag(self, tag: str) -> "Task":
