@@ -467,6 +467,62 @@ class TaskTestCase(unittest.TestCase):
         task4.complete_task(late_end)
         self.assertTrue(task4.is_delayed())
 
+    def test_task_cfd_with_none_dates(self):
+        """Test generating cumulative flow data with None dates and status edge cases."""
+        # Create a task with minimal initialization
+        task = Task(id="test_task", name="Test Task", aggressive_duration=10)
+
+        # Test with no dates set
+        cfd = task.get_cumulative_flow_data()
+
+        # Should return valid data structure even with no dates
+        self.assertIn("dates", cfd)
+        self.assertIn("status_counts", cfd)
+        self.assertIn("status_transitions", cfd)
+
+        # Set only start_date
+        start_date = datetime.now() - timedelta(days=5)
+        task.set_schedule(start_date)
+        cfd = task.get_cumulative_flow_data()
+
+        # Should have at least 5 days of data
+        self.assertGreaterEqual(len(cfd["dates"]), 5)
+
+        # Start task but don't complete
+        task.start_task(start_date + timedelta(days=1))
+        cfd = task.get_cumulative_flow_data()
+
+        # Should show it as in_progress
+        self.assertEqual(cfd["status_counts"]["in_progress"][-1], 1)
+        self.assertEqual(cfd["status_counts"]["completed"][-1], 0)
+
+        # Test with None actual_end_date (task in progress)
+        self.assertIsNone(task.actual_end_date)
+        cfd = task.get_cumulative_flow_data()
+
+        # Should not error and end date should default to today
+        self.assertTrue(datetime.now().strftime("%Y-%m-%d") in cfd["dates"])
+
+        # Add an invalid progress history entry with None date (shouldn't happen normally)
+        if hasattr(task, "progress_history"):
+            task.progress_history.append(
+                {
+                    "date": None,  # Invalid date
+                    "status": "in_progress",
+                    "remaining": 5,
+                }
+            )
+
+            # Should still work without errors
+            try:
+                cfd = task.get_cumulative_flow_data()
+                # Success if no exception raised
+                self.assertTrue(True)
+            except TypeError:
+                self.fail(
+                    "get_cumulative_flow_data raised TypeError with None date in history"
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1228,3 +1228,688 @@ class Task:
             progress_str = f", progress={self.get_progress_percentage():.1f}%"
 
         return f"Task(id={self.id}, name={self.name}, duration={self.planned_duration}{status_str}{chain_str}{progress_str})"
+
+    def get_cumulative_flow_data(self, start_date=None, end_date=None):
+        """
+        Generate data for a cumulative flow diagram showing task state transitions over time.
+
+        Args:
+            start_date: Start date for the diagram (defaults to planned start date)
+            end_date: End date for the diagram (defaults to actual/expected end date or today)
+
+        Returns:
+            dict: Data formatted for a cumulative flow diagram
+                {
+                    'dates': [date strings],
+                    'status_counts': {status: [counts]},
+                    'status_transitions': [{'date': datetime, 'from': status, 'to': status}],
+                    'cycle_time': float or None  # If task is completed
+                }
+        """
+        # Default start date to planned start if not provided
+        if start_date is None:
+            start_date = self.get_start_date() or datetime.now()
+
+        # Default end date to actual end, expected end, or today
+        if end_date is None:
+            if (
+                self.status == "completed"
+                and hasattr(self, "actual_end_date")
+                and self.actual_end_date
+            ):
+                end_date = self.actual_end_date
+            else:
+                end_date = self.get_end_date() or datetime.now()
+                end_date = max(end_date, datetime.now())
+
+        # Ensure dates are datetime objects
+        if isinstance(start_date, str):
+            start_date = datetime.strptime(start_date, "%Y-%m-%d")
+        if isinstance(end_date, str):
+            end_date = datetime.strptime(end_date, "%Y-%m-%d")
+
+        # Generate daily date range
+        dates = []
+        current_date = start_date
+        while current_date <= end_date:
+            dates.append(current_date)
+            current_date += timedelta(days=1)
+
+        date_strs = [date.strftime("%Y-%m-%d") for date in dates]
+
+        # Get all status transitions from history
+        transitions = []
+        status_at_date = {}  # Maps date to status
+
+        # Add initial status (planned)
+        initial_status = "planned"
+        initial_date = self.start_date
+        if initial_date and initial_date < start_date:
+            status_at_date[initial_date.strftime("%Y-%m-%d")] = initial_status
+
+        # Extract status changes from progress history
+        if hasattr(self, "progress_history"):
+            for entry in self.progress_history:
+                if "status_change" in entry or "status" in entry:
+                    date = entry["date"]
+                    new_status = entry.get("status", initial_status)
+                    date_str = date.strftime("%Y-%m-%d")
+
+                    # Skip if before our range
+                    if date < start_date:
+                        status_at_date[date_str] = new_status
+                        continue
+
+                    # Find the previous status
+                    prev_status = None
+                    for prev_date in sorted(status_at_date.keys(), reverse=True):
+                        if datetime.strptime(prev_date, "%Y-%m-%d") < date:
+                            prev_status = status_at_date[prev_date]
+                            break
+
+                    if prev_status is None:
+                        prev_status = initial_status
+
+                    # Record transition
+                    transitions.append(
+                        {"date": date, "from": prev_status, "to": new_status}
+                    )
+
+                    # Update status map
+                    status_at_date[date_str] = new_status
+
+        # Build status counts for each date
+        status_counts = {}
+        possible_statuses = [
+            "planned",
+            "in_progress",
+            "completed",
+            "on_hold",
+            "cancelled",
+        ]
+
+        for status in possible_statuses:
+            status_counts[status] = []
+
+        # For each date, determine the task's status
+        for date in dates:
+            date_str = date.strftime("%Y-%m-%d")
+            current_status = None
+
+            # Find the latest status before or on this date
+            for history_date in sorted(status_at_date.keys(), reverse=True):
+                if datetime.strptime(history_date, "%Y-%m-%d") <= date:
+                    current_status = status_at_date[history_date]
+                    break
+
+            # If no status found, determine based on actual dates
+            if current_status is None:
+                # Default to planned
+                current_status = "planned"
+
+                # Check if started by this date
+                if (
+                    hasattr(self, "actual_start_date")
+                    and self.actual_start_date is not None
+                ):
+                    if self.actual_start_date <= date:
+                        current_status = "in_progress"
+
+                        # Check if completed by this date
+                        if (
+                            hasattr(self, "actual_end_date")
+                            and self.actual_end_date is not None
+                            and self.actual_end_date <= date
+                        ):
+                            current_status = "completed"
+
+            # Add counts for this date (1 for current status, 0 for others)
+            for status in possible_statuses:
+                if status == current_status:
+                    status_counts[status].append(1)
+                else:
+                    status_counts[status].append(0)
+
+        # Calculate cycle time if task is completed
+        cycle_time = None
+        if (
+            self.status == "completed"
+            and hasattr(self, "actual_start_date")
+            and self.actual_start_date is not None
+            and hasattr(self, "actual_end_date")
+            and self.actual_end_date is not None
+        ):
+            cycle_time = (self.actual_end_date - self.actual_start_date).days
+
+        return {
+            "dates": date_strs,
+            "status_counts": status_counts,
+            "status_transitions": transitions,
+            "cycle_time": cycle_time,
+        }
+
+    def get_flow_metrics(self):
+        """
+        Calculate flow metrics for this task.
+
+        Returns:
+            dict: Flow metrics including:
+                - cycle_time: Days from start to completion (if completed)
+                - lead_time: Days from creation/planning to completion (if completed)
+                - wait_time: Days spent in on_hold status
+                - touch_time: Days spent in in_progress status
+                - efficiency: Ratio of touch_time to cycle_time (%)
+        """
+        metrics = {
+            "cycle_time": None,
+            "lead_time": None,
+            "wait_time": 0,
+            "touch_time": 0,
+            "efficiency": None,
+        }
+
+        # Only calculate full metrics for completed tasks
+        if (
+            self.status == "completed"
+            and self.actual_start_date
+            and self.actual_end_date
+        ):
+            # Cycle time = actual end - actual start
+            metrics["cycle_time"] = (self.actual_end_date - self.actual_start_date).days
+
+            # Lead time = actual end - planned start
+            if self.start_date:
+                metrics["lead_time"] = (self.actual_end_date - self.start_date).days
+
+        # Calculate time spent in each status
+        if hasattr(self, "progress_history") and self.progress_history:
+            status_periods = {}
+            current_status = None
+            current_start = None
+
+            # Add a synthetic entry for "now" if task isn't completed
+            history = self.progress_history.copy()
+            if self.status != "completed":
+                history.append({"date": datetime.now(), "status": self.status})
+
+            for idx, entry in enumerate(history):
+                if idx == 0:
+                    # First entry, start tracking
+                    current_status = entry.get("status", "planned")
+                    current_start = entry["date"]
+                    continue
+
+                # Calculate duration for the previous status
+                if current_status:
+                    duration = (entry["date"] - current_start).days
+                    if current_status not in status_periods:
+                        status_periods[current_status] = 0
+                    status_periods[current_status] += duration
+
+                # Update for next iteration
+                current_status = entry.get("status", current_status)
+                current_start = entry["date"]
+
+            # Update metrics based on collected periods
+            if "on_hold" in status_periods:
+                metrics["wait_time"] = status_periods["on_hold"]
+
+            if "in_progress" in status_periods:
+                metrics["touch_time"] = status_periods["in_progress"]
+
+            # Calculate efficiency if we have both touch time and cycle time
+            if metrics["cycle_time"] and metrics["cycle_time"] > 0:
+                metrics["efficiency"] = (
+                    metrics["touch_time"] / metrics["cycle_time"]
+                ) * 100
+
+        return metrics
+
+    def get_cumulative_flow_data(self, start_date=None, end_date=None):
+        """
+        Generate data for a cumulative flow diagram showing task state transitions over time.
+
+        Args:
+            start_date: Start date for the diagram (defaults to planned start date)
+            end_date: End date for the diagram (defaults to actual/expected end date or today)
+
+        Returns:
+            dict: Data formatted for a cumulative flow diagram
+                {
+                    'dates': [date strings],
+                    'status_counts': {status: [counts]},
+                    'status_transitions': [{'date': datetime, 'from': status, 'to': status}],
+                    'cycle_time': float or None  # If task is completed
+                }
+        """
+        # Default start date to planned start if not provided
+        if start_date is None:
+            start_date = self.get_start_date() or datetime.now()
+
+        # Default end date to actual end, expected end, or today
+        if end_date is None:
+            if self.status == "completed" and self.actual_end_date:
+                end_date = self.actual_end_date
+            else:
+                end_date = self.get_end_date() or datetime.now()
+                end_date = max(end_date, datetime.now())
+
+        # Ensure dates are datetime objects
+        if isinstance(start_date, str):
+            start_date = datetime.strptime(start_date, "%Y-%m-%d")
+        if isinstance(end_date, str):
+            end_date = datetime.strptime(end_date, "%Y-%m-%d")
+
+        # Generate daily date range
+        dates = []
+        current_date = start_date
+        while current_date <= end_date:
+            dates.append(current_date)
+            current_date += timedelta(days=1)
+
+        date_strs = [date.strftime("%Y-%m-%d") for date in dates]
+
+        # Get all status transitions from history
+        transitions = []
+        status_at_date = {}  # Maps date to status
+
+        # Add initial status (planned)
+        initial_status = "planned"
+        initial_date = self.start_date
+        if initial_date and initial_date < start_date:
+            status_at_date[initial_date.strftime("%Y-%m-%d")] = initial_status
+
+        # Extract status changes from progress history
+        if hasattr(self, "progress_history"):
+            for entry in self.progress_history:
+                if "status_change" in entry:
+                    date = entry["date"]
+                    new_status = entry["status"]
+                    date_str = date.strftime("%Y-%m-%d")
+
+                    # Skip if before our range
+                    if date < start_date:
+                        status_at_date[date_str] = new_status
+                        continue
+
+                    # Find the previous status
+                    prev_status = None
+                    for prev_date in sorted(status_at_date.keys(), reverse=True):
+                        if datetime.strptime(prev_date, "%Y-%m-%d") < date:
+                            prev_status = status_at_date[prev_date]
+                            break
+
+                    if prev_status is None:
+                        prev_status = initial_status
+
+                    # Record transition
+                    transitions.append(
+                        {"date": date, "from": prev_status, "to": new_status}
+                    )
+
+                    # Update status map
+                    status_at_date[date_str] = new_status
+
+        # Build status counts for each date
+        status_counts = {}
+        possible_statuses = [s.value for s in TaskStatus]
+
+        for status in possible_statuses:
+            status_counts[status] = []
+
+        # For each date, determine the task's status
+        for date in dates:
+            date_str = date.strftime("%Y-%m-%d")
+            current_status = None
+
+            # Find the latest status before or on this date
+            for history_date in sorted(status_at_date.keys(), reverse=True):
+                if datetime.strptime(history_date, "%Y-%m-%d") <= date:
+                    current_status = status_at_date[history_date]
+                    break
+
+            # Use planned as default if no status found
+            if current_status is None:
+                current_status = initial_status
+
+            # Add counts for this date (1 for current status, 0 for others)
+            for status in possible_statuses:
+                if status == current_status:
+                    status_counts[status].append(1)
+                else:
+                    status_counts[status].append(0)
+
+        # Calculate cycle time if task is completed
+        cycle_time = None
+        if (
+            self.status == "completed"
+            and self.actual_start_date
+            and self.actual_end_date
+        ):
+            cycle_time = (self.actual_end_date - self.actual_start_date).days
+
+        return {
+            "dates": date_strs,
+            "status_counts": status_counts,
+            "status_transitions": transitions,
+            "cycle_time": cycle_time,
+        }
+
+    def get_flow_metrics(self):
+        """
+        Calculate flow metrics for this task.
+
+        Returns:
+            dict: Flow metrics including:
+                - cycle_time: Days from start to completion (if completed)
+                - lead_time: Days from creation/planning to completion (if completed)
+                - wait_time: Days spent in on_hold status
+                - touch_time: Days spent in in_progress status
+                - efficiency: Ratio of touch_time to cycle_time (%)
+        """
+        metrics = {
+            "cycle_time": None,
+            "lead_time": None,
+            "wait_time": 0,
+            "touch_time": 0,
+            "efficiency": None,
+        }
+
+        # Only calculate full metrics for completed tasks
+        if (
+            self.status == "completed"
+            and self.actual_start_date
+            and self.actual_end_date
+        ):
+            # Cycle time = actual end - actual start
+            metrics["cycle_time"] = (self.actual_end_date - self.actual_start_date).days
+
+            # Lead time = actual end - planned start
+            if self.start_date:
+                metrics["lead_time"] = (self.actual_end_date - self.start_date).days
+
+        # Calculate time spent in each status
+        if hasattr(self, "progress_history") and self.progress_history:
+            status_periods = {}
+            current_status = None
+            current_start = None
+
+            # Add a synthetic entry for "now" if task isn't completed
+            history = self.progress_history.copy()
+            if self.status != "completed":
+                history.append({"date": datetime.now(), "status": self.status})
+
+            for idx, entry in enumerate(history):
+                if idx == 0:
+                    # First entry, start tracking
+                    current_status = entry.get("status", "planned")
+                    current_start = entry["date"]
+                    continue
+
+                # Calculate duration for the previous status
+                if current_status:
+                    duration = (entry["date"] - current_start).days
+                    if current_status not in status_periods:
+                        status_periods[current_status] = 0
+                    status_periods[current_status] += duration
+
+                # Update for next iteration
+                current_status = entry.get("status", current_status)
+                current_start = entry["date"]
+
+            # Update metrics based on collected periods
+            if "on_hold" in status_periods:
+                metrics["wait_time"] = status_periods["on_hold"]
+
+            if "in_progress" in status_periods:
+                metrics["touch_time"] = status_periods["in_progress"]
+
+            # Calculate efficiency if we have both touch time and cycle time
+            if metrics["cycle_time"] and metrics["cycle_time"] > 0:
+                metrics["efficiency"] = (
+                    metrics["touch_time"] / metrics["cycle_time"]
+                ) * 100
+
+        return metrics
+
+    @classmethod
+    def aggregate_flow_data(cls, tasks, start_date=None, end_date=None):
+        """
+        Aggregate cumulative flow data across multiple tasks.
+
+        Args:
+            tasks: List of Task objects
+            start_date: Start date for analysis (defaults to earliest start date)
+            end_date: End date for analysis (defaults to latest end date or today)
+
+        Returns:
+            dict: Aggregated flow data suitable for visualization
+        """
+        if not tasks:
+            return None
+
+        # Find date range if not specified
+        if start_date is None:
+            start_dates = [t.get_start_date() for t in tasks if t.get_start_date()]
+            start_date = min(start_dates) if start_dates else datetime.now()
+
+        if end_date is None:
+            end_dates = [t.get_end_date() for t in tasks if t.get_end_date()]
+            end_date = max(end_dates) if end_dates else datetime.now()
+            end_date = max(end_date, datetime.now())
+
+        # Generate daily date range
+        dates = []
+        current_date = start_date
+        while current_date <= end_date:
+            dates.append(current_date)
+            current_date += timedelta(days=1)
+
+        date_strs = [date.strftime("%Y-%m-%d") for date in dates]
+
+        # Initialize aggregated data structure
+        possible_statuses = [s.value for s in TaskStatus]
+        aggregated_status_counts = {
+            status: [0] * len(dates) for status in possible_statuses
+        }
+
+        # Collect data from each task
+        for task in tasks:
+            # Get flow data for this task
+            flow_data = task.get_cumulative_flow_data(start_date, end_date)
+
+            # Add to aggregated counts
+            for status, counts in flow_data["status_counts"].items():
+                # For each date in the task's data, add to our aggregate
+                for i, count in enumerate(counts):
+                    if i < len(aggregated_status_counts[status]):
+                        aggregated_status_counts[status][i] += count
+
+        # Calculate cycle time and throughput metrics
+        completed_tasks = [t for t in tasks if t.status == "completed"]
+        cycle_times = [
+            (t.actual_end_date - t.actual_start_date).days
+            for t in completed_tasks
+            if hasattr(t, "actual_start_date") and hasattr(t, "actual_end_date")
+        ]
+
+        avg_cycle_time = sum(cycle_times) / len(cycle_times) if cycle_times else None
+
+        # Calculate throughput by week
+        weekly_throughput = {}
+        for task in completed_tasks:
+            if not hasattr(task, "actual_end_date"):
+                continue
+
+            week_key = task.actual_end_date.strftime("%Y-W%W")
+            if week_key not in weekly_throughput:
+                weekly_throughput[week_key] = 0
+            weekly_throughput[week_key] += 1
+
+        # Return aggregated data
+        return {
+            "dates": date_strs,
+            "status_counts": aggregated_status_counts,
+            "avg_cycle_time": avg_cycle_time,
+            "weekly_throughput": weekly_throughput,
+            "total_completed": len(completed_tasks),
+            "total_tasks": len(tasks),
+        }
+
+    def get_throughput_data(cls, tasks, period="week"):
+        """
+        Calculate throughput data (tasks completed per time period).
+
+        Args:
+            tasks: List of Task objects
+            period: Time period for bucketing ('day', 'week', or 'month')
+
+        Returns:
+            dict: Throughput data {period_key: count}
+        """
+        completed_tasks = [
+            t
+            for t in tasks
+            if t.status == "completed" and hasattr(t, "actual_end_date")
+        ]
+
+        throughput = {}
+
+        for task in completed_tasks:
+            if period == "day":
+                period_key = task.actual_end_date.strftime("%Y-%m-%d")
+            elif period == "week":
+                period_key = task.actual_end_date.strftime("%Y-W%W")
+            elif period == "month":
+                period_key = task.actual_end_date.strftime("%Y-%m")
+            else:
+                raise ValueError(
+                    f"Invalid period: {period}. Use 'day', 'week', or 'month'"
+                )
+
+            if period_key not in throughput:
+                throughput[period_key] = 0
+            throughput[period_key] += 1
+
+        return throughput
+
+    def calculate_avg_flowtime(cls, tasks):
+        """
+        Calculate average flow time metrics across multiple tasks.
+
+        Args:
+            tasks: List of Task objects
+
+        Returns:
+            dict: Average flow metrics including cycle_time, lead_time, etc.
+        """
+        # Only include completed tasks
+        completed_tasks = [t for t in tasks if t.status == "completed"]
+
+        if not completed_tasks:
+            return {
+                "avg_cycle_time": None,
+                "avg_lead_time": None,
+                "avg_wait_time": None,
+                "avg_touch_time": None,
+                "avg_efficiency": None,
+            }
+
+        # Collect metrics from each task
+        all_metrics = [task.get_flow_metrics() for task in completed_tasks]
+
+        # Calculate averages
+        result = {}
+        for metric in [
+            "cycle_time",
+            "lead_time",
+            "wait_time",
+            "touch_time",
+            "efficiency",
+        ]:
+            values = [m[metric] for m in all_metrics if m[metric] is not None]
+            result[f"avg_{metric}"] = sum(values) / len(values) if values else None
+
+        return result
+
+        """
+        Aggregate cumulative flow data across multiple tasks.
+
+        Args:
+            tasks: List of Task objects
+            start_date: Start date for analysis (defaults to earliest start date)
+            end_date: End date for analysis (defaults to latest end date or today)
+
+        Returns:
+            dict: Aggregated flow data suitable for visualization
+        """
+        if not tasks:
+            return None
+
+        # Find date range if not specified
+        if start_date is None:
+            start_dates = [t.get_start_date() for t in tasks if t.get_start_date()]
+            start_date = min(start_dates) if start_dates else datetime.now()
+
+        if end_date is None:
+            end_dates = [t.get_end_date() for t in tasks if t.get_end_date()]
+            end_date = max(end_dates) if end_dates else datetime.now()
+            end_date = max(end_date, datetime.now())
+
+        # Generate daily date range
+        dates = []
+        current_date = start_date
+        while current_date <= end_date:
+            dates.append(current_date)
+            current_date += timedelta(days=1)
+
+        date_strs = [date.strftime("%Y-%m-%d") for date in dates]
+
+        # Initialize aggregated data structure
+        possible_statuses = [s.value for s in TaskStatus]
+        aggregated_status_counts = {
+            status: [0] * len(dates) for status in possible_statuses
+        }
+
+        # Collect data from each task
+        for task in tasks:
+            # Get flow data for this task
+            flow_data = task.get_cumulative_flow_data(start_date, end_date)
+
+            # Add to aggregated counts
+            for status, counts in flow_data["status_counts"].items():
+                # For each date in the task's data, add to our aggregate
+                for i, count in enumerate(counts):
+                    if i < len(aggregated_status_counts[status]):
+                        aggregated_status_counts[status][i] += count
+
+        # Calculate cycle time and throughput metrics
+        completed_tasks = [t for t in tasks if t.status == "completed"]
+        cycle_times = [
+            (t.actual_end_date - t.actual_start_date).days
+            for t in completed_tasks
+            if hasattr(t, "actual_start_date") and hasattr(t, "actual_end_date")
+        ]
+
+        avg_cycle_time = sum(cycle_times) / len(cycle_times) if cycle_times else None
+
+        # Calculate throughput by week
+        weekly_throughput = {}
+        for task in completed_tasks:
+            if not hasattr(task, "actual_end_date"):
+                continue
+
+            week_key = task.actual_end_date.strftime("%Y-W%W")
+            if week_key not in weekly_throughput:
+                weekly_throughput[week_key] = 0
+            weekly_throughput[week_key] += 1
+
+        # Return aggregated data
+        return {
+            "dates": date_strs,
+            "status_counts": aggregated_status_counts,
+            "avg_cycle_time": avg_cycle_time,
+            "weekly_throughput": weekly_throughput,
+            "total_completed": len(completed_tasks),
+            "total_tasks": len(tasks),
+        }

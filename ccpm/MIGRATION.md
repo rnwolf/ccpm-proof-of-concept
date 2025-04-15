@@ -324,6 +324,16 @@ The examples demonstrate how to use the new features:
 * Full Kitting and Notes: Shows managing full kitting status and tracking notes
 * Task Serialization: Demonstrates converting tasks to/from dictionaries and copying
 
+Task class will be able to:
+
+* Generate CFD data for individual tasks showing status transitions over time
+* Calculate flow metrics like cycle time, lead time, and efficiency
+* Aggregate data across multiple tasks for project-wide CFD visualizations
+* Generate throughput charts showing completion rates over time
+* Calculate average flow times across groups of tasks
+
+These enhancements will give you powerful capabilities to analyze workflow efficiency and identify bottlenecks in your project management process, similar to what you've already implemented for resources.
+
 
 ## Services
 
