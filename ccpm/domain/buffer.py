@@ -386,12 +386,17 @@ class Buffer:
         consumed = [0] * len(dates)
         status = [""] * len(dates)
 
-        # Create sorted consumption events
-        events = (
-            sorted(self.consumption_history, key=lambda x: x["date"])
-            if self.consumption_history
-            else []
-        )
+        # Create sorted consumption events with None date handling
+        if self.consumption_history:
+            # Filter out entries with None dates first, then sort
+            valid_events = [
+                event for event in self.consumption_history if event["date"] is not None
+            ]
+            events = (
+                sorted(valid_events, key=lambda x: x["date"]) if valid_events else []
+            )
+        else:
+            events = []
 
         # For each date, calculate buffer state
         current_remaining = self.original_size
