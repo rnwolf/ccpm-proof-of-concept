@@ -355,7 +355,13 @@ class Buffer:
             dates = []
 
             if self.consumption_history:
-                dates.append(max(entry["date"] for entry in self.consumption_history))
+                valid_dates = [
+                    entry["date"]
+                    for entry in self.consumption_history
+                    if entry["date"] is not None
+                ]
+                if valid_dates:
+                    dates.append(max(valid_dates))
 
             if hasattr(self, "end_date") and self.end_date:
                 dates.append(self.end_date)
