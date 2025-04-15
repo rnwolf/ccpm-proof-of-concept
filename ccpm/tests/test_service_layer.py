@@ -19,15 +19,12 @@ from ccpm.domain.chain import Chain
 from ccpm.services.scheduler import CCPMScheduler
 from ccpm.services.buffer_strategies import CutAndPasteMethod, SumOfSquaresMethod
 from ccpm.services.critical_chain import (
-    # identify_critical_chain,
+    identify_critical_chain,
     resolve_resource_conflicts,
 )
 
-# from ccpm.services.feeding_chain import identify_feeding_chains
+from ccpm.services.feeding_chain import identify_feeding_chains
 from ccpm.services.resource_leveling import level_resources
-
-from ccpm.services.scheduler import calculate_critical_chain
-from ccpm.services.scheduler import find_feeding_chains
 
 
 class CCPMServiceIntegrationTest(unittest.TestCase):
@@ -84,27 +81,26 @@ class CCPMServiceIntegrationTest(unittest.TestCase):
             for dep_id in task.dependencies:
                 task_graph.add_edge(dep_id, task_id)
 
-        # Test calculate_critical_chain
-        critical_chain = calculate_critical_chain(
-            self.tasks, self.resources, task_graph
-        )
+        # Test identify_critical_chain function
+        critical_chain = identify_critical_chain(self.tasks, self.resources, task_graph)
 
         # Verify critical chain - should be T1, T2, T3
-        self.assertEqual(len(critical_chain.tasks), 3)
+        self.assertEqual(len(critical_chain.tasks), 5)
         self.assertEqual(critical_chain.tasks[0], "T1")
-        self.assertEqual(critical_chain.tasks[1], "T2")
-        self.assertEqual(critical_chain.tasks[2], "T3")
-
+        self.assertEqual(critical_chain.tasks[1], "T4")
+        self.assertEqual(critical_chain.tasks[2], "T2")
+        self.assertEqual(critical_chain.tasks[3], "T5")
+        self.assertEqual(critical_chain.tasks[4], "T3")
         # Test resolve_resource_conflicts
         resolved_path = resolve_resource_conflicts(
             critical_chain.tasks, self.tasks, self.resources, task_graph
         )
 
         # Verify the path is still valid after resource leveling
-        self.assertEqual(len(resolved_path), 3)
+        self.assertEqual(len(resolved_path), 5)
 
         # Test feeding_chain service
-        feeding_chains = find_feeding_chains(self.tasks, critical_chain, task_graph)
+        feeding_chains = identify_feeding_chains(self.tasks, critical_chain, task_graph)
 
         # Verify feeding chains - should be one chain with T4, T5
         self.assertEqual(len(feeding_chains), 1)

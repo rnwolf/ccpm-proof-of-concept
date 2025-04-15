@@ -29,6 +29,8 @@ def create_fever_chart(scheduler, filename=None, show=True, project_name=None):
 
     # Get current execution date
     status_date = getattr(scheduler, "execution_date", datetime.now())
+    if status_date is None:
+        status_date = datetime.now()
 
     # Create the figure
     fig, ax = plt.subplots(figsize=(10, 8))

@@ -109,74 +109,6 @@ class CCPMScheduler:
 
         return self.tasks
 
-    # def identify_critical_chain(self):
-    #     """Identify the critical chain considering both dependencies and resources."""
-    #     if not self.task_graph:
-    #         self.build_dependency_graph()
-
-    #     # Calculate schedule if not already done
-    #     if not all(hasattr(task, "early_start") for task in self.tasks.values()):
-    #         self.calculate_baseline_schedule()
-
-    #     # Use the critical_chain service to identify the critical chain
-    #     self.critical_chain = identify_critical_chain(
-    #         self.tasks, self.resources, self.task_graph
-    #     )
-
-    #     # Resolve resource conflicts if there are shared resources
-    #     if self.resources:
-    #         resolved_path = resolve_resource_conflicts(
-    #             self.critical_chain.tasks, self.tasks, self.resources, self.task_graph
-    #         )
-    #         # Update critical chain with resolved path
-    #         self.critical_chain.tasks = resolved_path
-    #         # Update chain membership for tasks
-    #         for task_id in self.tasks:
-    #             if task_id in resolved_path:
-    #                 self.tasks[task_id].chain_id = self.critical_chain.id
-    #                 self.tasks[task_id].chain_type = "critical"
-
-    #     # Add critical chain to chains dictionary
-    #     self.chains[self.critical_chain.id] = self.critical_chain
-
-    #     # Set buffer strategy
-    #     self.critical_chain.set_buffer_strategy(self.project_buffer_strategy)
-
-    #     # Calculate project buffer
-    #     critical_tasks = [self.tasks[task_id] for task_id in self.critical_chain.tasks]
-    #     buffer_size = self.project_buffer_strategy.calculate_buffer_size(
-    #         critical_tasks, self.project_buffer_ratio
-    #     )
-    #     buffer_size = round(buffer_size)  # Round to nearest integer
-
-    #     # Create project buffer
-    #     buffer_id = "PB"
-    #     project_buffer = Buffer(
-    #         id=buffer_id,
-    #         name="Project Buffer",
-    #         size=buffer_size,
-    #         buffer_type="project",
-    #         strategy_name=self.project_buffer_strategy.get_name(),
-    #     )
-
-    #     # Add to buffers dictionary
-    #     self.buffers[buffer_id] = project_buffer
-
-    #     # Associate buffer with critical chain
-    #     self.critical_chain.set_buffer(project_buffer)
-
-    #     # Add buffer to the graph
-    #     last_critical_task = (
-    #         self.critical_chain.tasks[-1] if self.critical_chain.tasks else None
-    #     )
-    #     if last_critical_task and self.task_graph:
-    #         self.task_graph.add_node(
-    #             buffer_id, node_type="buffer", buffer=project_buffer
-    #         )
-    #         self.task_graph.add_edge(last_critical_task, buffer_id)
-
-    #     return self.critical_chain
-
     def calculate_critical_chain(self):
         """
         Calculate the critical chain for the project using the service function.
@@ -248,27 +180,6 @@ class CCPMScheduler:
 
         return self.critical_chain
 
-    # def identify_feeding_chains(self):
-    #     """Identify feeding chains - paths that feed into the critical chain."""
-    #     if not self.critical_chain:
-    #         self.identify_critical_chain()
-
-    #     # Use the feeding_chain service
-    #     feeding_chains = identify_feeding_chains(
-    #         self.tasks, self.critical_chain, self.task_graph
-    #     )
-
-    #     # Add feeding chains to scheduler
-    #     for chain in feeding_chains:
-    #         # Set buffer strategy
-    #         chain.set_buffer_strategy(self.default_feeding_buffer_strategy)
-    #         chain.buffer_ratio = self.default_feeding_buffer_ratio
-
-    #         # Add to dictionary
-    #         self.chains[chain.id] = chain
-
-    #     return feeding_chains
-
     def find_feeding_chains(self):
         """
         Identify feeding chains using the service function.
@@ -292,68 +203,6 @@ class CCPMScheduler:
             self.chains[chain.id] = chain
 
         return feeding_chains
-
-    # def calculate_buffers(self):
-    #     """Calculate all buffers based on chains and their selected strategies"""
-    #     if not self.critical_chain:
-    #         self.identify_critical_chain()
-
-    #     # Project buffer should already be calculated in identify_critical_chain
-    #     # Focus on feeding buffers here
-    #     for chain_id, chain in self.chains.items():
-    #         # Skip critical chain (project buffer already created)
-    #         if chain.type == "critical":
-    #             continue
-
-    #         # Get tasks in this chain
-    #         chain_tasks = [
-    #             self.tasks[task_id] for task_id in chain.tasks if task_id in self.tasks
-    #         ]
-
-    #         if not chain_tasks:
-    #             continue  # Skip empty chains
-
-    #         # Calculate feeding buffer size using chain's strategy
-    #         feeding_buffer_size = chain.buffer_strategy.calculate_buffer_size(
-    #             chain_tasks, chain.buffer_ratio
-    #         )
-
-    #         # Round to nearest integer
-    #         feeding_buffer_size = round(feeding_buffer_size)
-
-    #         # Create feeding buffer
-    #         buffer_id = f"FB_{chain_id}"
-    #         feeding_buffer = Buffer(
-    #             id=buffer_id,
-    #             name=f"Feeding Buffer {chain_id}",
-    #             size=feeding_buffer_size,
-    #             buffer_type="feeding",
-    #             connected_to=chain.connects_to_task_id,
-    #             strategy_name=chain.buffer_strategy.get_name(),
-    #         )
-
-    #         self.buffers[buffer_id] = feeding_buffer
-    #         chain.set_buffer(feeding_buffer)
-
-    #         # Add buffer to the graph
-    #         last_feeding_task = chain.tasks[-1] if chain.tasks else None
-    #         connects_to = chain.connects_to_task_id
-
-    #         if last_feeding_task and connects_to and self.task_graph:
-    #             # Add buffer node
-    #             self.task_graph.add_node(
-    #                 buffer_id, node_type="buffer", buffer=feeding_buffer
-    #             )
-
-    #             # Remove direct connection
-    #             if self.task_graph.has_edge(last_feeding_task, connects_to):
-    #                 self.task_graph.remove_edge(last_feeding_task, connects_to)
-
-    #             # Add connections through buffer
-    #             self.task_graph.add_edge(last_feeding_task, buffer_id)
-    #             self.task_graph.add_edge(buffer_id, connects_to)
-
-    #     return self.buffers
 
     def calculate_buffers(self):
         """Calculate all buffers based on chains and their selected strategies"""
@@ -416,41 +265,6 @@ class CCPMScheduler:
                 self.task_graph.add_edge(buffer_id, connects_to)
 
         return self.buffers
-
-    # def schedule(self):
-    #     """Run the full CCPM scheduling algorithm."""
-    #     # Build the dependency graph
-    #     self.build_dependency_graph()
-
-    #     # Calculate the initial schedule
-    #     self.calculate_baseline_schedule()
-
-    #     # Identify the critical chain
-    #     self.identify_critical_chain()
-
-    #     # Apply resource leveling
-    #     # Use the resource_leveling service
-    #     if self.resources:
-    #         self.tasks, self.task_graph = level_resources(
-    #             self.tasks, self.resources, self.critical_chain, self.task_graph
-    #         )
-
-    #     # Set actual dates for all tasks
-    #     for task_id, task in self.tasks.items():
-    #         if not hasattr(task, "start_date") or task.start_date is None:
-    #             task.start_date = self.start_date + timedelta(days=task.early_start)
-    #             task.end_date = task.start_date + timedelta(days=task.planned_duration)
-
-    #     # Identify feeding chains
-    #     self.identify_feeding_chains()
-
-    #     # Calculate and add feeding buffers to the network
-    #     self.calculate_buffers()
-
-    #     # Update schedule with buffers
-    #     self.apply_buffer_to_schedule()
-
-    #     return {"tasks": self.tasks, "chains": self.chains, "buffers": self.buffers}
 
     def schedule(self):
         """Run the full CCPM scheduling algorithm."""
@@ -820,20 +634,33 @@ class CCPMScheduler:
                                 pred_end = status_date + timedelta(
                                     days=pred_task.remaining_duration
                                 )
-                            elif hasattr(pred_task, "new_end_date"):
+                            elif (
+                                hasattr(pred_task, "new_end_date")
+                                and pred_task.new_end_date is not None
+                            ):
                                 # Not started but rescheduled - use new dates
                                 pred_end = pred_task.new_end_date
                             else:
                                 # Not started or updated - use original schedule
                                 pred_end = pred_task.end_date
 
-                            if pred_end > latest_end:
+                            # Safely compare dates, handling None values
+                            if pred_end is not None and (
+                                latest_end is None or pred_end > latest_end
+                            ):
                                 latest_end = pred_end
                         elif hasattr(self, "buffers") and pred_id in self.buffers:
                             # Predecessor is a buffer
                             buffer = self.buffers[pred_id]
-                            if hasattr(buffer, "new_end_date"):
-                                if buffer.new_end_date > latest_end:
+                            if (
+                                hasattr(buffer, "new_end_date")
+                                and buffer.new_end_date is not None
+                            ):
+                                # Safely compare dates, handling None values
+                                if (
+                                    latest_end is None
+                                    or buffer.new_end_date > latest_end
+                                ):
                                     latest_end = buffer.new_end_date
 
                     # Set new start date to latest predecessor end
@@ -920,7 +747,10 @@ class CCPMScheduler:
                 pred_end = pred_task.actual_end_date
             elif hasattr(pred_task, "status") and pred_task.status == "in_progress":
                 pred_end = status_date + timedelta(days=pred_task.remaining_duration)
-            elif hasattr(pred_task, "new_end_date"):
+            elif (
+                hasattr(pred_task, "new_end_date")
+                and pred_task.new_end_date is not None
+            ):
                 pred_end = pred_task.new_end_date
             else:
                 pred_end = pred_task.end_date
@@ -942,7 +772,12 @@ class CCPMScheduler:
                         "in_progress",
                     ]:
                         # If buffer end pushes successor start, delay the successor
-                        if buffer.new_end_date > succ_task.new_start_date:
+                        # Use safe comparison to handle None values
+                        if (
+                            buffer.new_end_date is not None
+                            and succ_task.new_start_date is not None
+                            and buffer.new_end_date > succ_task.new_start_date
+                        ):
                             succ_task.new_start_date = buffer.new_end_date
                             succ_task.new_end_date = (
                                 succ_task.new_start_date
@@ -984,8 +819,12 @@ class CCPMScheduler:
 
             task = self.tasks[task_id]
 
-            # Check if successor needs to be delayed
-            if task.new_end_date > succ_task.new_start_date:
+            # Check if successor needs to be delayed - handle None values safely
+            if (
+                task.new_end_date is not None
+                and succ_task.new_start_date is not None
+                and task.new_end_date > succ_task.new_start_date
+            ):
                 # Delay successor
                 succ_task.new_start_date = task.new_end_date
                 succ_task.new_end_date = succ_task.new_start_date + timedelta(

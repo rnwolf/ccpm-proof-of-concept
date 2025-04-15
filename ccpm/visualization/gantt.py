@@ -23,7 +23,11 @@ def create_gantt_chart(scheduler, filename=None, show=True, show_dependencies=Fa
     buffers = scheduler.buffers if hasattr(scheduler, "buffers") else {}
     critical_chain = scheduler.critical_chain
     chains = scheduler.chains if hasattr(scheduler, "chains") else {}
-    status_date = getattr(scheduler, "execution_date", datetime.now())
+
+    # Ensure status_date is never None - use current date if necessary
+    status_date = getattr(scheduler, "execution_date", None)
+    if status_date is None:
+        status_date = datetime.now()
 
     # Calculate the project duration for x-axis sizing
     all_end_dates = []
@@ -31,13 +35,13 @@ def create_gantt_chart(scheduler, filename=None, show=True, show_dependencies=Fa
     # Include task end dates
     for task in tasks.values():
         end_date = task.get_end_date()
-        if end_date:
+        if end_date:  # Only include non-None dates
             all_end_dates.append(end_date)
 
     # Include buffer end dates
     for buffer in buffers.values():
         end_date = buffer.get_effective_end_date()
-        if end_date:
+        if end_date:  # Only include non-None dates
             all_end_dates.append(end_date)
 
     # Include status date
@@ -46,8 +50,13 @@ def create_gantt_chart(scheduler, filename=None, show=True, show_dependencies=Fa
     # Get project start date
     start_date = scheduler.start_date
 
-    # Find the latest end date
-    last_end_date = max(all_end_dates) if all_end_dates else start_date
+    # Find the latest end date - filter out any None values
+    if all_end_dates:
+        # Filter out None values before finding max
+        filtered_end_dates = [date for date in all_end_dates if date is not None]
+        last_end_date = max(filtered_end_dates) if filtered_end_dates else start_date
+    else:
+        last_end_date = start_date
 
     # Create figure with GridSpec
     fig = plt.figure(figsize=(14, 8))
@@ -355,6 +364,8 @@ def create_resource_gantt(scheduler, filename=None, show=True):
     tasks = scheduler.tasks
     resources = scheduler.resources
     status_date = getattr(scheduler, "execution_date", datetime.now())
+    if status_date is None:
+        status_date = datetime.now()
 
     # Create figure
     fig, ax = plt.subplots(figsize=(14, 8))
