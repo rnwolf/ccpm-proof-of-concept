@@ -15,6 +15,7 @@ from ccpm.domain.task import Task
 from ccpm.domain.buffer import Buffer
 from ccpm.domain.chain import Chain
 from ccpm.services.scheduler import CCPMScheduler
+from ccpm.visualization.network import create_network_diagram
 from ccpm.visualization.gantt import (
     create_gantt_chart,
     create_resource_gantt,
@@ -259,11 +260,48 @@ def test_buffer_chart():
     print("Buffer consumption chart saved as 'test_buffer_chart.png'")
 
 
+def test_network_diagram():
+    """Test the Network Diagram visualization."""
+    print("Testing Network Diagram...")
+    scheduler = create_test_project()
+
+    # Create Network Diagram with different layouts
+    create_network_diagram(
+        scheduler, filename="test_network_spring.png", layout="spring"
+    )
+    print("Network diagram (spring layout) saved as 'test_network_spring.png'")
+
+    create_network_diagram(
+        scheduler, filename="test_network_circular.png", layout="circular"
+    )
+    print("Network diagram (circular layout) saved as 'test_network_circular.png'")
+
+    try:
+        create_network_diagram(scheduler, filename="test_network_dot.png", layout="dot")
+        print("Network diagram (dot layout) saved as 'test_network_dot.png'")
+    except Exception as e:
+        print(f"Note: Dot layout unavailable - {str(e)}")
+
+
+def test_gantt_with_dependencies():
+    """Test Gantt chart with dependency lines."""
+    print("Testing Gantt Chart with Dependencies...")
+    scheduler = create_test_project()
+
+    # Create Gantt chart with dependencies
+    create_gantt_chart(
+        scheduler, filename="test_gantt_with_deps.png", show_dependencies=True
+    )
+    print("Gantt chart with dependencies saved as 'test_gantt_with_deps.png'")
+
+
 def run_all_tests():
     """Run all visualization tests."""
     test_gantt_visualization()
     test_resource_gantt()
     test_buffer_chart()
+    test_network_diagram()
+    test_gantt_with_dependencies()
     print("All visualization tests completed successfully.")
 
 

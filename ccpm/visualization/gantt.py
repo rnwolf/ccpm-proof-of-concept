@@ -2,10 +2,10 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from matplotlib.ticker import FuncFormatter
 from matplotlib.patches import Patch
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta  # Adjusted to absolute import
 
 
-def create_gantt_chart(scheduler, filename=None, show=True):
+def create_gantt_chart(scheduler, filename=None, show=True, show_dependencies=False):
     """
     Create a Gantt chart visualization of the CCPM schedule.
 
@@ -13,6 +13,7 @@ def create_gantt_chart(scheduler, filename=None, show=True):
         scheduler: The CCPMScheduler instance
         filename: Optional filename to save the chart
         show: Whether to display the chart (default: True)
+        show_dependencies: Whether to show task dependency lines (default: False)
 
     Returns:
         The matplotlib figure
@@ -110,10 +111,10 @@ def create_gantt_chart(scheduler, filename=None, show=True):
                 # Add text for completion percentage
                 ax_gantt.text(
                     start_day + completed_duration / 2,
-                    i,
+                    i - 0.3,  # Position below the bar
                     f"{progress_pct:.0f}%",
                     ha="center",
-                    va="center",
+                    va="top",
                     color="black",
                     fontweight="bold",
                     fontsize=8,
@@ -133,10 +134,10 @@ def create_gantt_chart(scheduler, filename=None, show=True):
                 # Add text for remaining percentage
                 ax_gantt.text(
                     start_day + completed_duration + remaining_duration / 2,
-                    i,
+                    i + 0.3,  # Position above the bar
                     f"{100 - progress_pct:.0f}%",
                     ha="center",
-                    va="center",
+                    va="bottom",
                     color="black",
                     fontweight="bold",
                     fontsize=8,
@@ -171,6 +172,7 @@ def create_gantt_chart(scheduler, filename=None, show=True):
             ha="center",
             va="center",
             color="black",
+            bbox=dict(facecolor="white", alpha=0.7, pad=1, boxstyle="round"),
         )
 
     # Plot buffers
@@ -257,6 +259,55 @@ def create_gantt_chart(scheduler, filename=None, show=True):
 
     # Add grid lines
     ax_gantt.grid(axis="x", alpha=0.3)
+
+    # After drawing tasks and buffers but before adding legends, add dependency lines if requested
+    if show_dependencies:
+        # Create a mapping of task ID to y-position
+        task_id_to_row = {task.id: i for i, task in enumerate(sorted_tasks)}
+
+        # For each task, draw lines to its dependencies
+        for task_id, task in tasks.items():
+            # Skip if task has no dependencies or is not in the row mapping
+            if (
+                not hasattr(task, "dependencies")
+                or not task.dependencies
+                or task_id not in task_id_to_row
+            ):
+                continue
+
+            # Get this task's position
+            end_row = task_id_to_row[task_id]
+            start_date = task.get_start_date()
+            if not start_date:
+                continue
+            end_day = (start_date - scheduler.start_date).days
+
+            # Draw a line to each dependency
+            for dep_id in task.dependencies:
+                # Skip if dependency is not in the mapping or tasks dictionary
+                if dep_id not in task_id_to_row or dep_id not in tasks:
+                    continue
+
+                # Get dependency position
+                start_row = task_id_to_row[dep_id]
+                dep_task = tasks[dep_id]
+                end_date = dep_task.get_end_date()
+                if not end_date:
+                    continue
+                start_day = (end_date - scheduler.start_date).days
+
+                # Draw arrow from dependency end to task start
+                ax_gantt.annotate(
+                    "",
+                    xy=(end_day, end_row),  # End point (task start)
+                    xytext=(start_day, start_row),  # Start point (dependency end)
+                    arrowprops=dict(
+                        arrowstyle="->",
+                        color="gray",
+                        alpha=0.6,
+                        connectionstyle="arc3,rad=.2",
+                    ),
+                )
 
     # Add legend
     legend_elements = [
