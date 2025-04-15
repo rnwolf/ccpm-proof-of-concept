@@ -621,8 +621,17 @@ class Task:
                 # Calculate from remaining duration
                 latest_date = self.actual_start_date
                 if self.progress_history:
-                    latest_date = self.progress_history[-1]["date"]
-                return latest_date + timedelta(days=self.remaining_duration)
+                    latest_date = max(
+                        (
+                            entry["date"]
+                            for entry in self.progress_history
+                            if entry["date"] is not None
+                        ),
+                        default=latest_date,
+                    )
+                # Only return if we have a valid latest_date
+                if latest_date:
+                    return latest_date + timedelta(days=self.remaining_duration)
 
         # For planned tasks
         if hasattr(self, "new_end_date") and self.new_end_date:
@@ -1491,8 +1500,12 @@ class Task:
             if self.status == "completed" and self.actual_end_date:
                 end_date = self.actual_end_date
             else:
-                end_date = self.get_end_date() or datetime.now()
-                end_date = max(end_date, datetime.now())
+                calculated_end_date = self.get_end_date()
+                if calculated_end_date:
+                    end_date = calculated_end_date
+                else:
+                    end_date = datetime.now()  # Fallback to current date
+            end_date = max(end_date, datetime.now())
 
         # Ensure dates are datetime objects
         if isinstance(start_date, str):

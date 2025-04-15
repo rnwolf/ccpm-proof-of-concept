@@ -333,7 +333,13 @@ class Buffer:
             dates = []
 
             if self.consumption_history:
-                dates.append(min(entry["date"] for entry in self.consumption_history))
+                valid_dates = [
+                    entry["date"]
+                    for entry in self.consumption_history
+                    if entry["date"] is not None
+                ]
+                if valid_dates:
+                    dates.append(min(valid_dates))
 
             if self.start_date:
                 dates.append(self.start_date)
