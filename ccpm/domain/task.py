@@ -46,7 +46,7 @@ class Task:
         aggressive_duration: float,
         safe_duration: Optional[float] = None,
         dependencies: Optional[List] = None,
-        resources: Optional[Union[List[str], str]] = None,
+        resources: Optional[Union[List[str], str, Dict[str, float]]] = None,
         tags: Optional[List[str]] = None,
         description: str = "",
     ):
@@ -155,6 +155,26 @@ class Task:
 
         # Notes
         self.notes = []
+
+        # Just maintain resource_allocations
+        self.resource_allocations = {}
+
+        # Process resources input
+        if isinstance(resources, str):
+            # Single resource with full allocation
+            self.resource_allocations = {resources: 1.0}
+        elif isinstance(resources, list):
+            # List of resources, all with full allocation
+            self.resource_allocations = {r: 1.0 for r in resources}
+        elif isinstance(resources, dict):
+            # Dictionary of {resource_id: allocation_amount}
+            self.resource_allocations = resources.copy()
+
+    # resources property becomes a dynamic property
+    @property
+    def resources(self):
+        """Return list of resources for backward compatibility"""
+        return list(self.resource_allocations.keys())
 
     @property
     def status(self) -> str:
@@ -1926,3 +1946,18 @@ class Task:
             "total_completed": len(completed_tasks),
             "total_tasks": len(tasks),
         }
+
+    def set_resource_allocation(self, resource_id, amount):
+        """Set the allocation amount for a specific resource."""
+        if amount <= 0:
+            raise ValueError("Resource allocation must be positive")
+
+        if resource_id not in self.resource_allocations:
+            self.resource_allocations.append(resource_id)
+
+        self.resource_allocations[resource_id] = amount
+        return self
+
+    def get_resource_allocation(self, resource_id):
+        """Get the allocation amount for a specific resource."""
+        return self.resource_allocations.get(resource_id, 0.0)

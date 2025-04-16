@@ -155,8 +155,20 @@ def create_gantt_chart(scheduler, filename=None, show=True, show_dependencies=Fa
             # Not started - regular colored bar
             ax_gantt.barh(i, duration, left=start_day, color=color, alpha=0.6)
 
-        # Format the resource list
-        if hasattr(task, "resources"):
+        # Format the resource list with allocation amounts
+        if hasattr(task, "resource_allocations") and task.resource_allocations:
+            resource_items = []
+
+            for res_id, amount in task.resource_allocations.items():
+                if amount == 1.0:
+                    resource_items.append(res_id)  # Just show name for full allocation
+                else:
+                    resource_items.append(
+                        f"{res_id} ({amount}x)"
+                    )  # Show amount for partial/multiple
+
+            resource_str = ", ".join(resource_items)
+        elif hasattr(task, "resources"):  # Fallback for backward compatibility
             if isinstance(task.resources, str):
                 resource_str = task.resources
             elif isinstance(task.resources, list):
