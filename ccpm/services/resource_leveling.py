@@ -3,20 +3,7 @@ from datetime import datetime, timedelta
 
 
 def level_resources(tasks, resources, priority_chain=None, task_graph=None):
-    """
-    Apply resource leveling to the schedule, ensuring no resource is over-allocated.
-
-    Args:
-        tasks: Dictionary of Task objects keyed by ID
-        resources: Dictionary of Resource objects keyed by ID or list of resource names
-        priority_chain: Optional Chain object or list of task IDs to prioritize
-                       (usually the critical chain)
-        task_graph: Optional existing directed graph representing task dependencies
-
-    Returns:
-        dict: Updated tasks with adjusted schedules
-        nx.DiGraph: Task graph with added resource dependency edges
-    """
+    """Apply resource leveling to the schedule, ensuring no resource is over-allocated."""
     # Build task graph if not provided
     if task_graph is None:
         task_graph = nx.DiGraph()
@@ -41,44 +28,51 @@ def level_resources(tasks, resources, priority_chain=None, task_graph=None):
             # It's a list of task IDs
             priority_tasks = priority_chain
 
-    # Create a conflict graph where nodes are tasks and edges represent resource conflicts
+    # Create a conflict graph for resource conflicts
     conflict_graph = nx.Graph()
 
     # Add all tasks as nodes
     for task_id in tasks.keys():
         conflict_graph.add_node(task_id)
 
-    # Add edges between tasks that share resources
+    # Add edges between tasks that share resources and would exceed capacity
     for task1_id, task1 in tasks.items():
         for task2_id, task2 in tasks.items():
             if task1_id != task2_id:
                 # Check if tasks share any resources
-                t1_resources = _get_task_resource_allocations(task1)
-                t2_resources = _get_task_resource_allocations(task2)
-
-                # Get shared resources
-                shared_resources = set(t1_resources.keys()) & set(t2_resources.keys())
+                shared_resources = set(task1.resource_allocations.keys()) & set(
+                    task2.resource_allocations.keys()
+                )
 
                 # If tasks share resources and are not already dependent
                 if shared_resources:
-                    # Check if there's already a dependency path between the tasks
+                    # Check if there's already a path in the dependency graph
                     already_dependent = nx.has_path(
                         task_graph, task1_id, task2_id
                     ) or nx.has_path(task_graph, task2_id, task1_id)
 
                     if not already_dependent:
-                        # Check if the combined resource usage would exceed capacity for ANY shared resource
+                        # For each shared resource, check if combined allocation exceeds capacity
                         for resource_id in shared_resources:
-                            # Ensure we're comparing float values
-                            t1_usage = float(t1_resources[resource_id])
-                            t2_usage = float(t2_resources[resource_id])
+                            t1_allocation = task1.resource_allocations.get(
+                                resource_id, 0.0
+                            )
+                            t2_allocation = task2.resource_allocations.get(
+                                resource_id, 0.0
+                            )
 
-                            if t1_usage + t2_usage > 1.0:
-                                # Print for debugging
-                                print(
-                                    f"Resource conflict: {task1_id} ({t1_usage}) + {task2_id} ({t2_usage}) > 1.0 for {resource_id}"
+                            # Default capacity is 1.0 if not specified
+                            resource_capacity = 1.0
+                            # If resources is a dict with capacity info, use that
+                            if isinstance(resources, dict) and resource_id in resources:
+                                resource_capacity = resources[resource_id].get(
+                                    "capacity", 1.0
                                 )
+
+                            # If combined allocation exceeds capacity, add conflict edge
+                            if t1_allocation + t2_allocation > resource_capacity:
                                 conflict_graph.add_edge(task1_id, task2_id)
+                                # We only need one resource conflict to necessitate sequencing
                                 break
 
     # Apply graph coloring for resource allocation

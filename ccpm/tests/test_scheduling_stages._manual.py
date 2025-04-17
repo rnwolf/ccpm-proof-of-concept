@@ -11,7 +11,7 @@ from ccpm.services.resource_leveling import level_resources
 
 
 def test_scheduling_stages():
-    """Test the individual stages of the scheduling process with detailed output."""
+    """Test the individual stages of the scheduling process with proper resource leveling."""
     # Create a test scheduler
     scheduler = CCPMScheduler()
 
@@ -28,13 +28,14 @@ def test_scheduling_stages():
     #     -> T3
     # T2 /
     #
+    # Both T1 and T2 use Resource A, which should create a conflict
 
     task1 = Task(
         id="T1",
         name="Task 1",
         aggressive_duration=5,
         safe_duration=10,
-        resources=["Resource A"],
+        resources=["Resource A"],  # Uses Resource A
     )
 
     task2 = Task(
@@ -43,7 +44,7 @@ def test_scheduling_stages():
         aggressive_duration=5,
         safe_duration=10,
         dependencies=[],
-        resources=["Resource A"],
+        resources=["Resource A"],  # Also uses Resource A - should cause conflict
     )
 
     task3 = Task(
@@ -60,7 +61,17 @@ def test_scheduling_stages():
     scheduler.add_task(task2)
     scheduler.add_task(task3)
 
-    print("\n=== TEST: SCHEDULING STAGES ===")
+    # Set up resources properly - make sure resource_allocations dict is created
+    for task in scheduler.tasks.values():
+        if not hasattr(task, "resource_allocations"):
+            task.resource_allocations = {}
+            if isinstance(task.resources, str):
+                task.resource_allocations[task.resources] = 1.0
+            elif isinstance(task.resources, list):
+                for resource in task.resources:
+                    task.resource_allocations[resource] = 1.0
+
+    print("\n=== TEST: SCHEDULING STAGES WITH FIXED RESOURCES ===")
 
     # STAGE 1: Build dependency graph
     print("\n--- STAGE 1: Dependency Graph ---")
@@ -118,14 +129,14 @@ def test_scheduling_stages():
     # STAGE 4: Apply resource leveling
     print("\n--- STAGE 4: Resource Leveling ---")
     if scheduler.resources:
-        # Use the resource_leveling service
-        from ccpm.services.resource_leveling import level_resources
-
         print("Before resource leveling:")
         for task_id, task in scheduler.tasks.items():
             print(
                 f"Task {task_id}: early_start={task.early_start}, early_finish={task.early_finish}"
             )
+            print(
+                f"  - resources: {task.resource_allocations}"
+            )  # Should show Resource A with allocation 1.0
 
         # Apply resource leveling
         scheduler.tasks, scheduler.task_graph = level_resources(
@@ -144,8 +155,6 @@ def test_scheduling_stages():
                 print(f"  - new_start_date: {task.new_start_date}")
             if hasattr(task, "new_end_date") and task.new_end_date:
                 print(f"  - new_end_date: {task.new_end_date}")
-    else:
-        print("No resources defined for leveling")
 
     # STAGE 5: Set actual dates for all tasks
     print("\n--- STAGE 5: Set Actual Dates ---")
