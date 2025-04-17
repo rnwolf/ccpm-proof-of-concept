@@ -83,7 +83,7 @@ def level_resources(tasks, resources, priority_chain=None, task_graph=None):
     coloring = _apply_graph_coloring(conflict_graph, tasks, priority_tasks)
 
     # Adjust schedule based on coloring
-    tasks = _adjust_schedule_based_on_coloring(tasks, coloring)
+    tasks = _adjust_schedule_based_on_coloring(tasks, coloring, task_graph, priority_tasks)
 
     # Add resource dependencies to the task graph
     for task1_id, task2_id in conflict_graph.edges():
@@ -144,6 +144,8 @@ def _get_task_resource_allocations(task):
 def _apply_graph_coloring(conflict_graph, tasks, priority_tasks=None):
     """
     Apply graph coloring algorithm to assign colors (time slots) to tasks.
+    For CCPM, we prioritize tasks from back to front (latest finish time first)
+    with highest priority given to critical chain tasks.
 
     Args:
         conflict_graph: Graph where nodes are tasks and edges are resource conflicts
@@ -161,17 +163,28 @@ def _apply_graph_coloring(conflict_graph, tasks, priority_tasks=None):
         for i, task_id in enumerate(priority_tasks):
             task_priority[task_id] = i
 
-    # Next priority based on number of successors in task dependencies
+    # Next priority based on late finish time (later finish = higher priority)
+    # This implements the CCPM approach of scheduling from back to front
     for task_id in conflict_graph.nodes():
         if task_id not in task_priority:
-            # Default priority based on task dependencies (more successors = higher priority)
+            # Default priority based on late finish time (later finish = higher priority)
             # Use degree in conflict graph as a tie-breaker
-            successors = 0
-            if task_id in tasks:
-                successors = len(list(conflict_graph.neighbors(task_id)))
+            late_finish = 0
+            if task_id in tasks and hasattr(tasks[task_id], "late_finish"):
+                late_finish = tasks[task_id].late_finish
+            elif task_id in tasks and hasattr(tasks[task_id], "early_finish"):
+                late_finish = tasks[task_id].early_finish
+
+            # Also consider if task is part of a feeding chain
+            chain_priority = 0
+            if task_id in tasks and hasattr(tasks[task_id], "chain_type"):
+                if tasks[task_id].chain_type == "feeding":
+                    chain_priority = 500  # Priority for feeding chain tasks
+
+            # Higher late_finish and being in a feeding chain means higher priority
             task_priority[task_id] = (
-                1000 - successors
-            )  # Reverse so higher degree = higher priority
+                1000 - late_finish - chain_priority
+            )
 
     # Sort nodes by priority for coloring
     nodes_by_priority = sorted(
@@ -197,13 +210,18 @@ def _apply_graph_coloring(conflict_graph, tasks, priority_tasks=None):
     return coloring
 
 
-def _adjust_schedule_based_on_coloring(tasks, coloring):
+def _adjust_schedule_based_on_coloring(tasks, coloring, task_graph=None, priority_chain=None):
     """
     Adjust task schedule based on graph coloring results.
+    For CCPM, we schedule critical chain tasks as early as possible (ASAP)
+    and feeding chain tasks as late as possible (ALAP) while still respecting
+    their logical and resource dependencies.
 
     Args:
         tasks: Dictionary of Task objects
         coloring: Dictionary mapping task_id to color (time slot)
+        task_graph: Optional directed graph representing task dependencies
+        priority_chain: Optional list of task IDs that should be prioritized (e.g., critical chain)
 
     Returns:
         dict: Updated tasks with adjusted schedules
@@ -214,7 +232,6 @@ def _adjust_schedule_based_on_coloring(tasks, coloring):
         if color not in color_groups:
             color_groups[color] = []
         color_groups[color].append(task_id)
-
 
     # Sort colors (time slots)
     sorted_colors = sorted(color_groups.keys())
@@ -234,12 +251,45 @@ def _adjust_schedule_based_on_coloring(tasks, coloring):
     # Track the latest finish time for each task
     task_finish_times = {}
 
-    # For each color (time slot), adjust tasks within that group
+    # Identify critical chain and feeding chain tasks
+    critical_tasks = set()
+    feeding_tasks = set()
+
+    # First, identify tasks that are explicitly marked as critical or feeding
+    for task_id, task in tasks.items():
+        if hasattr(task, "chain_type"):
+            if task.chain_type == "critical":
+                critical_tasks.add(task_id)
+            elif task.chain_type == "feeding":
+                feeding_tasks.add(task_id)
+
+    # If priority_chain is provided, use it to identify critical tasks
+    if priority_chain:
+        critical_tasks.update(priority_chain)
+
+    # Identify potential feeding chain tasks based on dependencies
+    # A feeding chain task is one that is not in the critical chain
+    # but has a path to a critical chain task
+    potential_feeding_tasks = set()
+    for task_id in tasks:
+        if task_id not in critical_tasks:
+            # Check if this task has a path to a critical chain task
+            for critical_task_id in critical_tasks:
+                if nx.has_path(task_graph, task_id, critical_task_id):
+                    potential_feeding_tasks.add(task_id)
+                    break
+
+    # Add potential feeding tasks to feeding_tasks
+    feeding_tasks.update(potential_feeding_tasks)
+
+    # First pass: Schedule critical chain tasks as early as possible (ASAP)
+    # For each color (time slot), adjust critical chain tasks within that group
     for color in sorted_colors:
-        tasks_in_color = color_groups[color]
+        tasks_in_color = [t for t in color_groups[color] if t in critical_tasks]
+        if not tasks_in_color:
+            continue
 
         # Sort tasks in this color group topologically (within the group)
-        # This ensures dependent tasks are processed after their dependencies
         try:
             sorted_tasks = list(
                 nx.topological_sort(task_graph.subgraph(tasks_in_color))
@@ -248,7 +298,7 @@ def _adjust_schedule_based_on_coloring(tasks, coloring):
             # If there's a cycle, fall back to simple list
             sorted_tasks = tasks_in_color
 
-        # Process each task in this color group
+        # Process each critical chain task in this color group
         for task_id in sorted_tasks:
             task = tasks[task_id]
             adjusted_tasks.add(task_id)
@@ -285,7 +335,7 @@ def _adjust_schedule_based_on_coloring(tasks, coloring):
                 for prev_color in range(color):
                     if prev_color in color_groups:
                         for prev_task_id in color_groups[prev_color]:
-                            if prev_task_id in tasks:
+                            if prev_task_id in tasks and prev_task_id in adjusted_tasks:
                                 prev_task = tasks[prev_task_id]
                                 prev_task_resources = _get_task_resource_allocations(prev_task)
 
@@ -301,6 +351,192 @@ def _adjust_schedule_based_on_coloring(tasks, coloring):
             # Set new schedule
             task.adjusted_early_start = earliest_start
             task.adjusted_early_finish = earliest_start + task.planned_duration
+
+            # Update task's early_start and early_finish properties
+            task.early_start = task.adjusted_early_start
+            task.early_finish = task.adjusted_early_finish
+
+            # Store the finish time for this task
+            task_finish_times[task_id] = task.adjusted_early_finish
+
+    # Second pass: Schedule non-critical, non-feeding tasks as early as possible (ASAP)
+    # These are tasks that are not part of any chain
+    for color in sorted_colors:
+        tasks_in_color = [t for t in color_groups[color] if t not in critical_tasks and t not in feeding_tasks]
+        if not tasks_in_color:
+            continue
+
+        # Sort tasks in this color group topologically (within the group)
+        try:
+            sorted_tasks = list(
+                nx.topological_sort(task_graph.subgraph(tasks_in_color))
+            )
+        except nx.NetworkXUnfeasible:
+            # If there's a cycle, fall back to simple list
+            sorted_tasks = tasks_in_color
+
+        # Process each non-chain task in this color group
+        for task_id in sorted_tasks:
+            task = tasks[task_id]
+            adjusted_tasks.add(task_id)
+
+            # Calculate earliest start based on dependencies and resource conflicts
+            earliest_start = 0  # Default start time
+
+            # Check explicit dependencies first - always respect dependencies
+            for dep_id in task.dependencies:
+                if dep_id in tasks:
+                    dep_task = tasks[dep_id]
+
+                    # Always use the most up-to-date finish time for dependencies
+                    if dep_id in task_finish_times:
+                        dep_end = task_finish_times[dep_id]
+                        if dep_end > earliest_start:
+                            earliest_start = dep_end
+                    elif hasattr(dep_task, "adjusted_early_finish"):
+                        # If dependency has been adjusted, use that time
+                        dep_end = dep_task.adjusted_early_finish
+                        if dep_end > earliest_start:
+                            earliest_start = dep_end
+                    elif hasattr(dep_task, "early_finish"):
+                        # Otherwise use the original early finish time
+                        dep_end = dep_task.early_finish
+                        if dep_end > earliest_start:
+                            earliest_start = dep_end
+
+            # Check resource conflicts - tasks with the same color can run in parallel
+            # Tasks with different colors that share resources must be sequential
+            if color > 0:
+                # Find tasks in lower color groups that share resources with this task
+                task_resources = _get_task_resource_allocations(task)
+                for prev_color in range(color):
+                    if prev_color in color_groups:
+                        for prev_task_id in color_groups[prev_color]:
+                            if prev_task_id in tasks and prev_task_id in adjusted_tasks:
+                                prev_task = tasks[prev_task_id]
+                                prev_task_resources = _get_task_resource_allocations(prev_task)
+
+                                # Check if they share resources
+                                shared_resources = set(task_resources.keys()) & set(prev_task_resources.keys())
+                                if shared_resources:
+                                    # They share resources, so this task must start after the previous task finishes
+                                    if prev_task_id in task_finish_times:
+                                        prev_finish = task_finish_times[prev_task_id]
+                                        if prev_finish > earliest_start:
+                                            earliest_start = prev_finish
+
+            # Set new schedule
+            task.adjusted_early_start = earliest_start
+            task.adjusted_early_finish = earliest_start + task.planned_duration
+
+            # Update task's early_start and early_finish properties
+            task.early_start = task.adjusted_early_start
+            task.early_finish = task.adjusted_early_finish
+
+            # Store the finish time for this task
+            task_finish_times[task_id] = task.adjusted_early_finish
+
+    # Third pass: Schedule feeding chain tasks as late as possible (ALAP)
+    # First, we need to find the latest possible start time for each feeding chain task
+    # based on its successors and resource constraints
+
+    # Build a reverse graph for backward pass
+    reverse_graph = task_graph.reverse()
+
+    # Find the maximum project duration based on current schedule
+    project_duration = max(
+        task.early_finish for task in tasks.values() if hasattr(task, "early_finish")
+    )
+
+    # Initialize latest finish times for all tasks
+    latest_finish = {}
+    for task_id in tasks:
+        if task_id in feeding_tasks:
+            # For feeding tasks, start with project duration
+            latest_finish[task_id] = project_duration
+        elif task_id in adjusted_tasks:
+            # For already adjusted tasks, use their current finish time
+            latest_finish[task_id] = tasks[task_id].early_finish
+
+    # Perform backward pass to find latest finish times for feeding chain tasks
+    # Process feeding tasks in reverse topological order
+    feeding_tasks_list = list(feeding_tasks)
+    try:
+        sorted_feeding_tasks = list(nx.topological_sort(reverse_graph.subgraph(feeding_tasks_list)))
+    except nx.NetworkXUnfeasible:
+        # If there's a cycle, fall back to simple list
+        sorted_feeding_tasks = feeding_tasks_list
+
+    for task_id in sorted_feeding_tasks:
+        task = tasks[task_id]
+
+        # Find the minimum latest start time of all successors
+        min_successor_start = project_duration
+
+        # Check explicit successors
+        for succ_id in reverse_graph.neighbors(task_id):
+            if succ_id in tasks and succ_id in latest_finish:
+                succ_task = tasks[succ_id]
+                succ_start = latest_finish[succ_id] - succ_task.planned_duration
+                if succ_start < min_successor_start:
+                    min_successor_start = succ_start
+
+        # Check resource conflicts - tasks with the same color can run in parallel
+        # Tasks with different colors that share resources must be sequential
+        task_color = coloring.get(task_id, 0)
+        task_resources = _get_task_resource_allocations(task)
+
+        for other_task_id, other_color in coloring.items():
+            if other_task_id == task_id or other_color <= task_color:
+                continue  # Skip self and tasks with lower or same color
+
+            if other_task_id in tasks and other_task_id in latest_finish:
+                other_task = tasks[other_task_id]
+                other_resources = _get_task_resource_allocations(other_task)
+
+                # Check if they share resources
+                shared_resources = set(task_resources.keys()) & set(other_resources.keys())
+                if shared_resources:
+                    # They share resources, so this task must finish before the other task starts
+                    other_start = latest_finish[other_task_id] - other_task.planned_duration
+                    if other_start < min_successor_start:
+                        min_successor_start = other_start
+
+        # Calculate latest finish time for this task
+        latest_finish_time = min_successor_start
+
+        # Update latest finish time
+        latest_finish[task_id] = latest_finish_time
+
+    # Now schedule feeding chain tasks based on their latest finish times
+    for task_id in feeding_tasks:
+        if task_id in latest_finish:
+            task = tasks[task_id]
+
+            # Calculate latest start time
+            latest_start = latest_finish[task_id] - task.planned_duration
+
+            # Ensure the task doesn't start before its dependencies finish
+            earliest_possible_start = 0
+            for dep_id in task.dependencies:
+                if dep_id in tasks:
+                    dep_task = tasks[dep_id]
+                    if dep_id in task_finish_times:
+                        dep_end = task_finish_times[dep_id]
+                        if dep_end > earliest_possible_start:
+                            earliest_possible_start = dep_end
+                    elif hasattr(dep_task, "early_finish"):
+                        dep_end = dep_task.early_finish
+                        if dep_end > earliest_possible_start:
+                            earliest_possible_start = dep_end
+
+            # Use the later of earliest_possible_start and latest_start
+            # This ensures we schedule ALAP while respecting dependencies
+            start_time = max(earliest_possible_start, latest_start)
+
+            # Set new schedule
+            task.adjusted_early_start = start_time
+            task.adjusted_early_finish = start_time + task.planned_duration
 
             # Update task's early_start and early_finish properties
             task.early_start = task.adjusted_early_start

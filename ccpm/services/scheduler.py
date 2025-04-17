@@ -277,6 +277,11 @@ class CCPMScheduler:
         # Identify the critical chain
         self.calculate_critical_chain()
 
+        # Identify feeding chains before resource leveling
+        # This allows the resource leveling algorithm to properly schedule
+        # feeding chain tasks as late as possible (ALAP)
+        self.find_feeding_chains()
+
         # Apply resource leveling
         # Use the resource_leveling service
         if self.resources:
@@ -289,9 +294,6 @@ class CCPMScheduler:
             if not hasattr(task, "start_date") or task.start_date is None:
                 task.start_date = self.start_date + timedelta(days=task.early_start)
                 task.end_date = task.start_date + timedelta(days=task.planned_duration)
-
-        # Identify feeding chains
-        self.find_feeding_chains()
 
         # Calculate and add feeding buffers to the network
         self.calculate_buffers()
