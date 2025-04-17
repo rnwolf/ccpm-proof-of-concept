@@ -359,8 +359,10 @@ def _adjust_schedule_based_on_coloring(tasks, coloring, task_graph=None, priorit
             # Store the finish time for this task
             task_finish_times[task_id] = task.adjusted_early_finish
 
-    # Second pass: Schedule non-critical, non-feeding tasks as early as possible (ASAP)
+    # Second pass: Schedule non-critical, non-feeding tasks
     # These are tasks that are not part of any chain
+    # For tasks that can run in parallel with critical chain tasks, schedule them to start at the same time
+    # For other tasks, schedule them as early as possible (ASAP)
     for color in sorted_colors:
         tasks_in_color = [t for t in color_groups[color] if t not in critical_tasks and t not in feeding_tasks]
         if not tasks_in_color:
@@ -425,6 +427,22 @@ def _adjust_schedule_based_on_coloring(tasks, coloring, task_graph=None, priorit
                                         if prev_finish > earliest_start:
                                             earliest_start = prev_finish
 
+            # Check if this task can be scheduled in parallel with any critical chain tasks
+            # If so, delay it to start at the same time as the critical chain task
+            parallel_critical_start = None
+            for critical_task_id in critical_tasks:
+                if critical_task_id in parallel_tasks[task_id]:
+                    critical_task = tasks[critical_task_id]
+                    if hasattr(critical_task, "early_start") and critical_task.early_start >= earliest_start:
+                        # Find the earliest critical task that starts after this task's earliest possible start
+                        if parallel_critical_start is None or critical_task.early_start < parallel_critical_start:
+                            parallel_critical_start = critical_task.early_start
+
+            # If this task can be scheduled in parallel with a critical chain task,
+            # delay it to start at the same time as the critical chain task
+            if parallel_critical_start is not None:
+                earliest_start = parallel_critical_start
+
             # Set new schedule
             task.adjusted_early_start = earliest_start
             task.adjusted_early_finish = earliest_start + task.planned_duration
@@ -457,6 +475,29 @@ def _adjust_schedule_based_on_coloring(tasks, coloring, task_graph=None, priorit
         elif task_id in adjusted_tasks:
             # For already adjusted tasks, use their current finish time
             latest_finish[task_id] = tasks[task_id].early_finish
+
+    # Create a dictionary to track which tasks can be scheduled in parallel
+    # based on lack of resource conflicts and logical dependencies
+    parallel_tasks = {}
+    for task1_id in tasks:
+        parallel_tasks[task1_id] = set()
+        for task2_id in tasks:
+            if task1_id == task2_id:
+                continue
+
+            # Check if tasks have logical dependencies
+            task1 = tasks[task1_id]
+            task2 = tasks[task2_id]
+            has_dependency = (task1_id in task2.dependencies) or (task2_id in task1.dependencies)
+
+            # Check if tasks have resource conflicts
+            task1_resources = _get_task_resource_allocations(task1)
+            task2_resources = _get_task_resource_allocations(task2)
+            shared_resources = set(task1_resources.keys()) & set(task2_resources.keys())
+
+            # If no logical dependencies and no resource conflicts, they can be scheduled in parallel
+            if not has_dependency and not shared_resources:
+                parallel_tasks[task1_id].add(task2_id)
 
     # Perform backward pass to find latest finish times for feeding chain tasks
     # Process feeding tasks in reverse topological order
@@ -530,9 +571,26 @@ def _adjust_schedule_based_on_coloring(tasks, coloring, task_graph=None, priorit
                         if dep_end > earliest_possible_start:
                             earliest_possible_start = dep_end
 
-            # Use the later of earliest_possible_start and latest_start
-            # This ensures we schedule ALAP while respecting dependencies
-            start_time = max(earliest_possible_start, latest_start)
+            # Check if this feeding task can be scheduled in parallel with any critical chain tasks
+            can_parallel_with_critical = False
+            for critical_task_id in critical_tasks:
+                if critical_task_id in parallel_tasks[task_id]:
+                    critical_task = tasks[critical_task_id]
+                    # If the critical task is already scheduled and this feeding task can run in parallel with it,
+                    # schedule this feeding task to start at the same time as the critical task
+                    if hasattr(critical_task, "early_start") and critical_task.early_start >= earliest_possible_start:
+                        earliest_possible_start = critical_task.early_start
+                        can_parallel_with_critical = True
+                        break
+
+            # If this feeding task can be scheduled in parallel with a critical chain task,
+            # use the earliest possible start time instead of the latest start time
+            if can_parallel_with_critical:
+                start_time = earliest_possible_start
+            else:
+                # Use the later of earliest_possible_start and latest_start
+                # This ensures we schedule ALAP while respecting dependencies
+                start_time = max(earliest_possible_start, latest_start)
 
             # Set new schedule
             task.adjusted_early_start = start_time
