@@ -53,19 +53,26 @@ def level_resources(tasks, resources, priority_chain=None, task_graph=None):
         for task2_id, task2 in tasks.items():
             if task1_id != task2_id:
                 # Check if tasks share any resources
-                t1_resources = _get_task_resources(task1)
-                t2_resources = _get_task_resources(task2)
+                t1_resources = _get_task_resource_allocations(task1)
+                t2_resources = _get_task_resource_allocations(task2)
 
                 # If tasks share resources and are not already dependent
-                shared_resources = bool(set(t1_resources) & set(t2_resources))
+                shared_resources = set(t1_resources.keys()) & set(t2_resources.keys())
+                if shared_resources:
+                    # Check if there's already a dependency path between the tasks
+                    already_dependent = nx.has_path(
+                        task_graph, task1_id, task2_id
+                    ) or nx.has_path(task_graph, task2_id, task1_id)
 
-                # Check if there's already a dependency path between the tasks
-                already_dependent = nx.has_path(
-                    task_graph, task1_id, task2_id
-                ) or nx.has_path(task_graph, task2_id, task1_id)
-
-                if shared_resources and not already_dependent:
-                    conflict_graph.add_edge(task1_id, task2_id)
+                    if not already_dependent:
+                        # Check if the combined resource usage would exceed capacity
+                        for resource_id in shared_resources:
+                            if (
+                                t1_resources[resource_id] + t2_resources[resource_id]
+                                > 1.0
+                            ):
+                                conflict_graph.add_edge(task1_id, task2_id)
+                                break
 
     # Apply graph coloring for resource allocation
     coloring = _apply_graph_coloring(conflict_graph, tasks, priority_tasks)
@@ -103,6 +110,35 @@ def _get_task_resources(task):
         return task.resources
     else:
         return []
+
+
+def _get_task_resource_allocations(task):
+    """
+    Helper function to extract resource allocations from a task, handling different formats.
+
+    Args:
+        task: Task object
+
+    Returns:
+        dict: Dictionary mapping resource ID to allocation amount
+    """
+    # Check if task has resource_allocations attribute (new format)
+    if hasattr(task, "resource_allocations") and task.resource_allocations:
+        return task.resource_allocations.copy()
+
+    # This branch is likely unnecessary now, but kept for backward compatibility
+    # with any old code that might still be setting resources directly
+    if hasattr(task, "resources") and task.resources:
+        resource_allocations = {}
+        if isinstance(task.resources, str):
+            resource_allocations[task.resources] = 1.0
+        elif isinstance(task.resources, list):
+            for resource in task.resources:
+                resource_allocations[resource] = 1.0
+        return resource_allocations
+
+    # Default to empty dict if no resources found
+    return {}
 
 
 def _apply_graph_coloring(conflict_graph, tasks, priority_tasks=None):

@@ -102,13 +102,18 @@ class Task:
                 raise TaskError("Dependencies must be a list")
             self.dependencies = list(dependencies)
 
-        # Initialize resources
-        if isinstance(resources, str):
-            self.resources = [resources]  # Convert single string to list
-        elif isinstance(resources, list):
-            self.resources = resources
-        else:
-            self.resources = []
+        # Initialize resource_allocations instead of setting resources directly
+        self.resource_allocations = {}
+        if resources:
+            if isinstance(resources, str):
+                # Convert single string to dictionary with 1.0 allocation
+                self.resource_allocations = {resources: 1.0}
+            elif isinstance(resources, list):
+                # Convert list to dictionary with 1.0 allocation for each
+                self.resource_allocations = {r: 1.0 for r in resources}
+            elif isinstance(resources, dict):
+                # Dictionary format is already {resource_id: allocation_amount}
+                self.resource_allocations = resources.copy()
 
         # Initialize tags
         self.tags = list(tags) if tags else []
@@ -155,20 +160,6 @@ class Task:
 
         # Notes
         self.notes = []
-
-        # Just maintain resource_allocations
-        self.resource_allocations = {}
-
-        # Process resources input
-        if isinstance(resources, str):
-            # Single resource with full allocation
-            self.resource_allocations = {resources: 1.0}
-        elif isinstance(resources, list):
-            # List of resources, all with full allocation
-            self.resource_allocations = {r: 1.0 for r in resources}
-        elif isinstance(resources, dict):
-            # Dictionary of {resource_id: allocation_amount}
-            self.resource_allocations = resources.copy()
 
     # resources property becomes a dynamic property
     @property

@@ -1,10 +1,10 @@
 from datetime import datetime, timedelta
 import networkx as nx
 
-from ..domain.task import Task
-from ..domain.buffer import Buffer
-from ..domain.chain import Chain
-from ..utils.graph import (
+from ccpm.domain.task import Task
+from ccpm.domain.buffer import Buffer
+from ccpm.domain.chain import Chain
+from ccpm.utils.graph import (
     build_dependency_graph,
     forward_pass,
     backward_pass,
