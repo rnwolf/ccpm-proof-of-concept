@@ -168,7 +168,7 @@ def _apply_graph_coloring(conflict_graph, tasks, priority_tasks=None):
             # Use degree in conflict graph as a tie-breaker
             successors = 0
             if task_id in tasks:
-                successors = len(conflict_graph.neighbors(task_id))
+                successors = len(list(conflict_graph.neighbors(task_id)))
             task_priority[task_id] = (
                 1000 - successors
             )  # Reverse so higher degree = higher priority

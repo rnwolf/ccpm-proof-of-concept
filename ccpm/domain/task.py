@@ -85,14 +85,22 @@ class Task:
         # Set default safe duration if not provided
         if safe_duration is None:
             self.safe_duration = self.aggressive_duration * 1.5
-        elif (
-            not isinstance(safe_duration, (int, float))
-            or safe_duration < aggressive_duration
-        ):
-            raise TaskError(
-                "Safe duration must be a number greater than or equal to aggressive duration"
-            )
         else:
+            # Try to convert safe_duration to float if it's not already a number
+            if not isinstance(safe_duration, (int, float)):
+                try:
+                    safe_duration = float(safe_duration)
+                except (ValueError, TypeError):
+                    raise TaskError(
+                        "Safe duration must be a number greater than or equal to aggressive duration"
+                    )
+
+            # Check if safe_duration is less than aggressive_duration
+            if safe_duration < aggressive_duration:
+                raise TaskError(
+                    "Safe duration must be a number greater than or equal to aggressive duration"
+                )
+
             self.safe_duration = float(safe_duration)
 
         # Initialize dependencies
