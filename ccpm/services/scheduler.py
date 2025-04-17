@@ -10,7 +10,7 @@ from ccpm.utils.graph import (
     backward_pass,
     find_critical_path,
 )
-from .buffer_strategies import (
+from ccpm.services.buffer_strategies import (
     CutAndPasteMethod,
     SumOfSquaresMethod,
     RootSquareErrorMethod,
@@ -1237,26 +1237,37 @@ class CCPMScheduler:
                 break
 
         if project_buffer:
-            if hasattr(project_buffer, "new_end_date"):
+            if hasattr(project_buffer, "new_end_date") and project_buffer.new_end_date:
                 projected_end = project_buffer.new_end_date
             else:
                 projected_end = latest_task_end + timedelta(days=project_buffer.size)
 
-            report.append(f"\nProjected End Date: {projected_end.strftime('%Y-%m-%d')}")
+            # Add this null check before using projected_end
+            if projected_end:
+                report.append(
+                    f"\nProjected End Date: {projected_end.strftime('%Y-%m-%d')}"
+                )
 
-            # Calculate if project is ahead or behind schedule
-            if hasattr(project_buffer, "end_date"):
-                original_end = project_buffer.end_date
-                if projected_end > original_end:
-                    delay = (projected_end - original_end).days
-                    report.append(f"Project is currently {delay} days behind schedule")
-                elif projected_end < original_end:
-                    ahead = (original_end - projected_end).days
-                    report.append(
-                        f"Project is currently {ahead} days ahead of schedule"
-                    )
-                else:
-                    report.append("Project is currently on schedule")
+                # Calculate if project is ahead or behind schedule
+                if hasattr(project_buffer, "end_date") and project_buffer.end_date:
+                    original_end = project_buffer.end_date
+
+                    # Add null check for both variables
+                    if projected_end and original_end:
+                        if projected_end > original_end:
+                            delay = (projected_end - original_end).days
+                            report.append(
+                                f"Project is currently {delay} days behind schedule"
+                            )
+                        elif projected_end < original_end:
+                            ahead = (original_end - projected_end).days
+                            report.append(
+                                f"Project is currently {ahead} days ahead of schedule"
+                            )
+                        else:
+                            report.append("Project is currently on schedule")
+            else:
+                report.append("\nProjected End Date: Not available")
 
         return "\n".join(report)
 

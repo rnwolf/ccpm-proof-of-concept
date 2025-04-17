@@ -56,8 +56,10 @@ def level_resources(tasks, resources, priority_chain=None, task_graph=None):
                 t1_resources = _get_task_resource_allocations(task1)
                 t2_resources = _get_task_resource_allocations(task2)
 
-                # If tasks share resources and are not already dependent
+                # Get shared resources
                 shared_resources = set(t1_resources.keys()) & set(t2_resources.keys())
+
+                # If tasks share resources and are not already dependent
                 if shared_resources:
                     # Check if there's already a dependency path between the tasks
                     already_dependent = nx.has_path(
@@ -65,12 +67,17 @@ def level_resources(tasks, resources, priority_chain=None, task_graph=None):
                     ) or nx.has_path(task_graph, task2_id, task1_id)
 
                     if not already_dependent:
-                        # Check if the combined resource usage would exceed capacity
+                        # Check if the combined resource usage would exceed capacity for ANY shared resource
                         for resource_id in shared_resources:
-                            if (
-                                t1_resources[resource_id] + t2_resources[resource_id]
-                                > 1.0
-                            ):
+                            # Ensure we're comparing float values
+                            t1_usage = float(t1_resources[resource_id])
+                            t2_usage = float(t2_resources[resource_id])
+
+                            if t1_usage + t2_usage > 1.0:
+                                # Print for debugging
+                                print(
+                                    f"Resource conflict: {task1_id} ({t1_usage}) + {task2_id} ({t2_usage}) > 1.0 for {resource_id}"
+                                )
                                 conflict_graph.add_edge(task1_id, task2_id)
                                 break
 
