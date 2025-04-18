@@ -688,16 +688,22 @@ class CriticalChainScheduler:
             buffer_consumption_pct = getattr(buffer, "progress", 0)
 
             # Create fever chart with zones
-            # Green zone (0-33%)
-            axs[i].fill_between([0, 33], [0, 33], color="green", alpha=0.3)
-            axs[i].fill_between([33, 100], [0, 33], color="green", alpha=0.3)
 
-            # Yellow zone (33-67%)
-            axs[i].fill_between([0, 67], [33, 67], color="yellow", alpha=0.3)
-            axs[i].fill_between([67, 100], [33, 67], color="yellow", alpha=0.3)
+            # Define the zone boundaries
+            # X-axis points (chain completion %)
+            x_vals = [0, 100]
+            # Green-Yellow boundary (y = 10% at x = 0, y = 70% at x = 100)
+            green_yellow_y = [10, 70]
+            # Yellow-Red boundary (y = 30% at x = 0, y = 90% at x = 100)
+            yellow_red_y = [30, 90]
 
-            # Red zone (67-100%)
-            axs[i].fill_between([0, 100], [67, 100], color="red", alpha=0.3)
+            # Fill the zones
+            # Red zone (top)
+            axs[i].fill_between(x_vals, yellow_red_y, [100, 100], color="red", alpha=0.3)
+            # Yellow zone (middle)
+            axs[i].fill_between(x_vals, green_yellow_y, yellow_red_y, color="yellow", alpha=0.3)
+            # Green zone (bottom)
+            axs[i].fill_between(x_vals, [0, 0], green_yellow_y, color="green", alpha=0.3)
 
             # Plot consumption point
             axs[i].plot(
