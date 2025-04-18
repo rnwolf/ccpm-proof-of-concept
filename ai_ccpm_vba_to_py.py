@@ -468,7 +468,7 @@ class CriticalChainScheduler:
         # Find project timeline (min start to max finish)
         min_start = min(task.start for task in all_tasks)
         max_finish = max(task.finish for task in all_tasks)
-        project_duration = max_finish - min_start
+        project_duration = int(max_finish - min_start)
 
         # Collect all resources used in the project
         all_resources = set()
@@ -493,9 +493,9 @@ class CriticalChainScheduler:
                 continue
 
             # For each day the task is active
-            for day in range(task.start, task.finish):
+            for day in range(int(task.start), int(task.finish)):
                 # Adjust day to be relative to project start
-                relative_day = day - min_start
+                relative_day = int(day - min_start)
 
                 # For each resource the task uses
                 for resource in task.resources:
@@ -512,20 +512,39 @@ class CriticalChainScheduler:
         # Create the visualization
         fig, ax = plt.subplots(figsize=(15, 0.5 * len(all_resources)))
 
+        # Find the maximum load value for color scaling
+        max_load = 0
+        for resource in all_resources:
+            resource_max = max(resource_loading[resource])
+            if resource_max > max_load:
+                max_load = resource_max
+
+        # Create a colormap for the heat map
+        import matplotlib.cm as cm
+        from matplotlib.colors import Normalize
+
+        # Use a colormap that transitions from light to dark
+        cmap = plt.get_cmap('YlOrRd')  # Yellow-Orange-Red colormap
+        norm = Normalize(vmin=0, vmax=max_load)
+
         # For each resource
         for i, resource in enumerate(all_resources):
             # For each day
             for day in range(project_duration + 1):
                 load = resource_loading[resource][day]
                 if load > 0:  # Only show non-zero loads
+                    # Get color based on load value
+                    color = cmap(norm(load))
+
                     # Draw a cell with the load value
                     rect = plt.Rectangle((day + min_start, i - 0.4), 1, 0.8, 
-                                        facecolor='skyblue', alpha=0.8, edgecolor='black')
+                                        facecolor=color, edgecolor='black')
                     ax.add_patch(rect)
 
-                    # Add the load value text
+                    # Add the load value text with smaller font size
                     ax.text(day + min_start + 0.5, i, f"{load:.1f}", 
-                           ha='center', va='center', fontweight='bold')
+                           ha='center', va='center', fontweight='bold', 
+                           fontsize=8, color='black')
 
         # Set up the axes
         ax.set_yticks(range(len(all_resources)))
@@ -542,6 +561,18 @@ class CriticalChainScheduler:
 
         # Add grid
         plt.grid(axis="x", linestyle="--", alpha=0.7)
+
+        # Add a colorbar legend
+        from matplotlib.colorbar import ColorbarBase
+        from matplotlib.cm import ScalarMappable
+
+        # Create a ScalarMappable for the colorbar
+        sm = ScalarMappable(cmap=cmap, norm=norm)
+        sm.set_array([])
+
+        # Add the colorbar to the figure
+        cbar = plt.colorbar(sm, ax=ax, orientation='vertical', pad=0.01)
+        cbar.set_label('Resource Load')
 
         plt.tight_layout()
         plt.show()
@@ -820,6 +851,8 @@ def test_resource_conflicts():
 
     # Visualize
     scheduler.visualize()
+    # visualize resource load
+    scheduler.visualize_resource()
 
     return scheduler
 
@@ -869,6 +902,7 @@ def test_larry_simple():
 
     # Schedule
     scheduler.schedule()
+    scheduler.visualize_resource()
 
     # Print results
     print("\nCritical Chain:")
@@ -887,6 +921,8 @@ def test_larry_simple():
 
     # Visualize
     scheduler.visualize()
+    # visualize resource load
+    scheduler.visualize_resource()
 
     return scheduler
 
@@ -973,6 +1009,8 @@ def test_larry_complex():
 
     # Visualize
     scheduler.visualize()
+    # visualize resource load
+    scheduler.visualize_resource()
 
     return scheduler
 
