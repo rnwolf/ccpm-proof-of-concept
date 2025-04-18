@@ -295,6 +295,63 @@ def test_gantt_with_dependencies():
     print("Gantt chart with dependencies saved as 'test_gantt_with_deps.png'")
 
 
+def test_resource_visualization():
+    """Test the Resource Loading visualization method in CriticalChainScheduler."""
+    print("Testing Resource Loading Visualization...")
+
+    # Import the CriticalChainScheduler class
+    import sys
+    import os
+    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+    from ai_ccpm_vba_to_py import CriticalChainScheduler, Task, Resource
+
+    # Create a scheduler
+    scheduler = CriticalChainScheduler()
+
+    # Create resources
+    resource1 = Resource("R1", "Developer")
+    resource2 = Resource("R2", "Designer")
+    resource3 = Resource("R3", "Tester")
+
+    scheduler.add_resource(resource1)
+    scheduler.add_resource(resource2)
+    scheduler.add_resource(resource3)
+
+    # Create tasks with resources
+    task1 = Task(1, "Task 1", 5)
+    task1.resources = ["R1", "R2"]
+    task1.start = 0
+    task1.finish = 5
+    task1.type = 1  # Critical chain
+
+    task2 = Task(2, "Task 2", 8)
+    task2.resources = ["R1", "R3"]
+    task2.start = 5
+    task2.finish = 13
+    task2.type = 1  # Critical chain
+
+    task3 = Task(3, "Task 3", 6)
+    task3.resources = ["R2"]
+    task3.start = 3
+    task3.finish = 9
+    task3.type = 2  # Secondary chain
+
+    task4 = Task(4, "Task 4", 4)
+    task4.resources = ["R3"]
+    task4.start = 13
+    task4.finish = 17
+    task4.type = 1  # Critical chain
+
+    # Add tasks to scheduler
+    scheduler.critical_chain = [task1, task2, task4]
+    scheduler.secondary_chains = [[task3]]
+
+    # Call the visualize_resource method
+    scheduler.visualize_resource()
+
+    print("Resource Loading visualization test completed.")
+
+
 def run_all_tests():
     """Run all visualization tests."""
     test_gantt_visualization()
@@ -302,6 +359,7 @@ def run_all_tests():
     test_buffer_chart()
     test_network_diagram()
     test_gantt_with_dependencies()
+    test_resource_visualization()
     print("All visualization tests completed successfully.")
 
 

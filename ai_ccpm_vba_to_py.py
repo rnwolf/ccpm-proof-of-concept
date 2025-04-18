@@ -447,6 +447,105 @@ class CriticalChainScheduler:
         plt.grid(axis="x", linestyle="--", alpha=0.7)
         plt.show()
 
+    def visualize_resource(self):
+        """
+        Create a resource loading chart visualization.
+
+        Time (Days) along the bottom axis.
+        Resources on the Y axis.
+        Chart displays a count of the load caused by each task for each day.
+        Zero load is blank.
+        """
+        # Collect all tasks from critical and secondary chains
+        all_tasks = self.critical_chain + [
+            t for chain in self.secondary_chains for t in chain
+        ]
+
+        if not all_tasks:
+            print("No tasks to visualize")
+            return
+
+        # Find project timeline (min start to max finish)
+        min_start = min(task.start for task in all_tasks)
+        max_finish = max(task.finish for task in all_tasks)
+        project_duration = max_finish - min_start
+
+        # Collect all resources used in the project
+        all_resources = set()
+        for task in all_tasks:
+            if hasattr(task, 'resources') and task.resources:
+                all_resources.update(task.resources)
+
+        # Sort resources for consistent display
+        all_resources = sorted(list(all_resources))
+
+        if not all_resources:
+            print("No resources to visualize")
+            return
+
+        # Create a matrix to store resource loading
+        # [resource][day] = load
+        resource_loading = {resource: [0] * (project_duration + 1) for resource in all_resources}
+
+        # Calculate resource loading for each day
+        for task in all_tasks:
+            if not hasattr(task, 'resources') or not task.resources:
+                continue
+
+            # For each day the task is active
+            for day in range(task.start, task.finish):
+                # Adjust day to be relative to project start
+                relative_day = day - min_start
+
+                # For each resource the task uses
+                for resource in task.resources:
+                    # Get allocation amount (default to 1.0 if not specified)
+                    allocation = 1.0
+                    if hasattr(task, 'get_resource_allocation'):
+                        allocation = task.get_resource_allocation(resource)
+                    elif hasattr(task, 'resource_allocations') and resource in task.resource_allocations:
+                        allocation = task.resource_allocations[resource]
+
+                    # Add the allocation to the resource loading
+                    resource_loading[resource][relative_day] += allocation
+
+        # Create the visualization
+        fig, ax = plt.subplots(figsize=(15, 0.5 * len(all_resources)))
+
+        # For each resource
+        for i, resource in enumerate(all_resources):
+            # For each day
+            for day in range(project_duration + 1):
+                load = resource_loading[resource][day]
+                if load > 0:  # Only show non-zero loads
+                    # Draw a cell with the load value
+                    rect = plt.Rectangle((day + min_start, i - 0.4), 1, 0.8, 
+                                        facecolor='skyblue', alpha=0.8, edgecolor='black')
+                    ax.add_patch(rect)
+
+                    # Add the load value text
+                    ax.text(day + min_start + 0.5, i, f"{load:.1f}", 
+                           ha='center', va='center', fontweight='bold')
+
+        # Set up the axes
+        ax.set_yticks(range(len(all_resources)))
+        ax.set_yticklabels(all_resources)
+        ax.set_xlabel("Time (days)")
+        ax.set_ylabel("Resources")
+        ax.set_title("Resource Loading Chart")
+
+        # Set x-axis limits
+        ax.set_xlim(min_start, max_finish)
+
+        # Set y-axis limits to add half a row of space at the bottom and top
+        ax.set_ylim(-0.5, len(all_resources) - 0.5)
+
+        # Add grid
+        plt.grid(axis="x", linestyle="--", alpha=0.7)
+
+        plt.tight_layout()
+        plt.show()
+
     def update_progress(self, task_id, progress_percentage):
         """Update a task's progress and calculate buffer consumption"""
         # Find the task
