@@ -405,6 +405,19 @@ class CriticalChainScheduler:
                 fontweight="bold",
             )
 
+            # Add resource information to the right of the task bar
+            if task.resources:
+                resource_text = ", ".join([f"{r}:1.0" for r in task.resources])
+                ax.text(
+                    task.finish + 0.1,  # Position slightly to the right of the bar
+                    i,
+                    f"Resources: {resource_text}",
+                    ha="left",
+                    va="center",
+                    fontsize=8,
+                    color="black",
+                )
+
             # Draw progress if any
             if hasattr(task, "progress") and task.progress > 0:
                 progress_width = (task.finish - task.start) * (task.progress / 100)
