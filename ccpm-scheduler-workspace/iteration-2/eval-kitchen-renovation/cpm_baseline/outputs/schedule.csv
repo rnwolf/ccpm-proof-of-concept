@@ -1,0 +1,7 @@
+id,name,type,chain,start,finish,duration,resources,predecessors
+K1,Demolition,task,critical,0,8,8,builder,
+K2,Electrics,task,critical,8,14,6,electrician,K1
+K3,Plumbing,task,critical,8,14,6,plumber,K1
+K4,Cabinets,task,critical,14,24,10,builder,K2;K3
+K5,Worktops and finishing,task,critical,24,30,6,builder,K4
+K6,Tiling,task,none,14,22,8,builder,K3

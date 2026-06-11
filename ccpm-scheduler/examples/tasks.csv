@@ -1,0 +1,7 @@
+id,name,duration_safe,predecessors,resources
+A,Spec,10,,blue
+B,Build,20,A,green
+C,Design,10,A,blue
+D,Integrate,20,B,blue
+E,Test rig,10,C,green
+F,Commission,10,D;E,red

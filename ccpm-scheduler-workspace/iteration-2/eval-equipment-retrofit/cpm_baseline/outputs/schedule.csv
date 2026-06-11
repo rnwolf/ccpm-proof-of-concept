@@ -1,0 +1,11 @@
+id,name,type,chain,start,finish,duration,resources,predecessors
+R1,Strip down machine,task,critical,0,8,8,mech,
+R2,Order parts,task,none,0,4,4,plan,
+R3,Refurbish spindle,task,critical,8,20,12,mech,R1
+R4,Paint frame,task,none,8,14,6,paint,R1
+R5,Upgrade wiring,task,critical,8,18,10,elec,R1
+R6,Install spindle,task,critical,20,26,6,mech,R3;R2
+R7,Install panels,task,none,14,18,4,mech,R4
+R8,Wire cabinet,task,critical,18,26,8,elec,R5;R2
+R9,Commission,task,critical,26,32,6,elec;mech,R6;R7;R8
+R10,Document and handover,task,critical,32,36,4,plan,R9

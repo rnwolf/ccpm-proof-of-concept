@@ -1,0 +1,13 @@
+id,name,resource,duration_safe,duration_focused,start_day,end_day,on_critical_chain,type
+W1,Content outline,writer,6.0,3.0,0.0,3.0,no,task
+W2,Draft copy,writer,10.0,5.0,3.0,8.0,no,task
+W3,Design mockups,designer,8.0,4.0,3.0,7.0,no,task
+W4,Build frontend,dev,12.0,6.0,8.0,14.0,yes,task
+W5,Build backend,dev,16.0,8.0,0.0,8.0,yes,task
+W6,Integrate,dev,8.0,4.0,14.0,18.0,yes,task
+W7,Edit copy,editor,6.0,3.0,8.0,11.0,no,task
+W8,Load content,writer,4.0,2.0,18.0,20.0,yes,task
+W9,Launch QA,qa,6.0,3.0,20.0,23.0,yes,task
+FB-W4,Feeding buffer (W1+W3 -> W4),,,1.0,7.0,8.0,no,feeding_buffer
+FB-W8,Feeding buffer (W1+W2+W7 -> W8),,,5.5,11.0,16.5,no,feeding_buffer
+PB,Project buffer,,,11.5,23.0,34.5,yes,project_buffer

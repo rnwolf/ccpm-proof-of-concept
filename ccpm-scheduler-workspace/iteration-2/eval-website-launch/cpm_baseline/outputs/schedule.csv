@@ -1,0 +1,10 @@
+id,name,type,chain,start,finish,duration,resources,predecessors
+W1,Content outline,task,critical,0,6,6,writer,
+W2,Draft copy,task,none,6,16,10,writer,W1
+W3,Design mockups,task,critical,6,14,8,designer,W1
+W4,Build frontend,task,critical,14,26,12,dev,W3
+W5,Build backend,task,none,0,16,16,dev,
+W6,Integrate,task,critical,26,34,8,dev,W4;W5
+W7,Edit copy,task,none,16,22,6,editor,W2
+W8,Load content,task,critical,34,38,4,writer,W6;W7
+W9,Launch QA,task,critical,38,44,6,qa,W8

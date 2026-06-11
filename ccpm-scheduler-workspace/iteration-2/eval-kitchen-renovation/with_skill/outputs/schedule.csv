@@ -1,0 +1,9 @@
+id,name,type,chain,start,finish,duration,resources,predecessors
+K1,Demolition,task,critical,0,4,4,builder,
+K3,Plumbing,task,critical,4,7,3,plumber,K1
+K2,Electrics,task,feeding-1,6,9,3,electrician,K1
+K6,Tiling,task,critical,7,11,4,builder,K3
+FB1,Feeding buffer,feeding_buffer,feeding-1,9,11,2,,K2:FB
+K4,Cabinets,task,critical,11,16,5,builder,K2;K3
+K5,Worktops and finishing,task,critical,16,19,3,builder,K4
+PB,Project buffer,project_buffer,critical,19,29,10,,K5:PB

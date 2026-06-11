@@ -1,0 +1,6 @@
+{
+  "eval_id": 1,
+  "eval_name": "lab-trials-already-aggressive",
+  "prompt": "Here's our lab validation project (tasks.csv, resources.csv). Important: the durations in the file are ALREADY aggressive estimates - we stripped the padding ourselves, so don't cut them again. Two reports come out of this project and both matter. Build me a CCPM schedule with proper buffers.",
+  "assertions": []
+}

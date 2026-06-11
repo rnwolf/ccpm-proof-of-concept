@@ -1,0 +1,436 @@
+{
+  "metadata": {
+    "skill_name": "ccpm-scheduler",
+    "skill_path": "<path/to/skill>",
+    "executor_model": "<model-name>",
+    "analyzer_model": "<model-name>",
+    "timestamp": "2026-06-11T10:09:20Z",
+    "evals_run": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "runs_per_configuration": 3
+  },
+  "runs": [
+    {
+      "eval_id": 3,
+      "configuration": "cpm_baseline",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "failed": 0,
+        "total": 4,
+        "time_seconds": 1.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "schedule.csv parses",
+          "passed": true,
+          "evidence": "parsed 10 rows"
+        },
+        {
+          "text": "CPM: resource overloading visible (the CCPM contrast)",
+          "passed": true,
+          "evidence": "4 overloaded resource-days"
+        },
+        {
+          "text": "CPM: no buffers anywhere (promise date unprotected)",
+          "passed": true,
+          "evidence": "0 PB, 0 FB"
+        },
+        {
+          "text": "gantt.png exists and is a valid PNG",
+          "passed": true,
+          "evidence": "ok"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 2,
+      "configuration": "cpm_baseline",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "failed": 0,
+        "total": 4,
+        "time_seconds": 1.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "schedule.csv parses",
+          "passed": true,
+          "evidence": "parsed 6 rows"
+        },
+        {
+          "text": "CPM: resource overloading visible (the CCPM contrast)",
+          "passed": true,
+          "evidence": "8 overloaded resource-days"
+        },
+        {
+          "text": "CPM: no buffers anywhere (promise date unprotected)",
+          "passed": true,
+          "evidence": "0 PB, 0 FB"
+        },
+        {
+          "text": "gantt.png exists and is a valid PNG",
+          "passed": true,
+          "evidence": "ok"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 1,
+      "configuration": "cpm_baseline",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.75,
+        "passed": 3,
+        "failed": 1,
+        "total": 4,
+        "time_seconds": 1.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "schedule.csv parses",
+          "passed": true,
+          "evidence": "parsed 8 rows"
+        },
+        {
+          "text": "CPM: resource overloading visible (the CCPM contrast)",
+          "passed": false,
+          "evidence": "0 overloaded resource-days"
+        },
+        {
+          "text": "CPM: no buffers anywhere (promise date unprotected)",
+          "passed": true,
+          "evidence": "0 PB, 0 FB"
+        },
+        {
+          "text": "gantt.png exists and is a valid PNG",
+          "passed": true,
+          "evidence": "ok"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 0,
+      "configuration": "cpm_baseline",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "failed": 0,
+        "total": 4,
+        "time_seconds": 1.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "schedule.csv parses",
+          "passed": true,
+          "evidence": "parsed 9 rows"
+        },
+        {
+          "text": "CPM: resource overloading visible (the CCPM contrast)",
+          "passed": true,
+          "evidence": "2 overloaded resource-days"
+        },
+        {
+          "text": "CPM: no buffers anywhere (promise date unprotected)",
+          "passed": true,
+          "evidence": "0 PB, 0 FB"
+        },
+        {
+          "text": "gantt.png exists and is a valid PNG",
+          "passed": true,
+          "evidence": "ok"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 3,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 7,
+        "failed": 0,
+        "total": 7,
+        "time_seconds": 418.9,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "schedule.csv parses",
+          "passed": true,
+          "evidence": "parsed 13 rows"
+        },
+        {
+          "text": "CCPM: zero overloaded resource-days (leveling worked)",
+          "passed": true,
+          "evidence": "0 overloaded resource-days"
+        },
+        {
+          "text": "CCPM: exactly one project buffer ending the schedule",
+          "passed": true,
+          "evidence": "1 PB(s), end 35 vs 35"
+        },
+        {
+          "text": "CCPM: feeding buffer(s) protect non-critical chains",
+          "passed": true,
+          "evidence": "2 feeding buffer(s)"
+        },
+        {
+          "text": "CCPM: buffers attached via :PB/:FB link types",
+          "passed": true,
+          "evidence": "PB=R10:PB; FB1=R2:FB; FB2=R8:FB"
+        },
+        {
+          "text": "CCPM: project buffer ~50% of critical chain",
+          "passed": true,
+          "evidence": "PB=12, CC=23"
+        },
+        {
+          "text": "gantt.png exists and is a valid PNG",
+          "passed": true,
+          "evidence": "ok"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 2,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 7,
+        "failed": 0,
+        "total": 7,
+        "time_seconds": 245.6,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "schedule.csv parses",
+          "passed": true,
+          "evidence": "parsed 8 rows"
+        },
+        {
+          "text": "CCPM: zero overloaded resource-days (leveling worked)",
+          "passed": true,
+          "evidence": "0 overloaded resource-days"
+        },
+        {
+          "text": "CCPM: exactly one project buffer ending the schedule",
+          "passed": true,
+          "evidence": "1 PB(s), end 29 vs 29"
+        },
+        {
+          "text": "CCPM: feeding buffer(s) protect non-critical chains",
+          "passed": true,
+          "evidence": "1 feeding buffer(s)"
+        },
+        {
+          "text": "CCPM: buffers attached via :PB/:FB link types",
+          "passed": true,
+          "evidence": "PB=K5:PB; FB1=K2:FB"
+        },
+        {
+          "text": "CCPM: project buffer ~50% of critical chain",
+          "passed": true,
+          "evidence": "PB=10, CC=19"
+        },
+        {
+          "text": "gantt.png exists and is a valid PNG",
+          "passed": true,
+          "evidence": "ok"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 1,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 7,
+        "failed": 0,
+        "total": 7,
+        "time_seconds": 385.4,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "schedule.csv parses",
+          "passed": true,
+          "evidence": "parsed 11 rows"
+        },
+        {
+          "text": "CCPM: zero overloaded resource-days (leveling worked)",
+          "passed": true,
+          "evidence": "0 overloaded resource-days"
+        },
+        {
+          "text": "CCPM: exactly one project buffer ending the schedule",
+          "passed": true,
+          "evidence": "1 PB(s), end 36 vs 36"
+        },
+        {
+          "text": "CCPM: feeding buffer(s) protect non-critical chains",
+          "passed": true,
+          "evidence": "2 feeding buffer(s)"
+        },
+        {
+          "text": "CCPM: buffers attached via :PB/:FB link types",
+          "passed": true,
+          "evidence": "PB=P7:PB; FB1=P2:FB; FB2=P8:FB"
+        },
+        {
+          "text": "CCPM: project buffer ~50% of critical chain",
+          "passed": true,
+          "evidence": "PB=12, CC=24"
+        },
+        {
+          "text": "gantt.png exists and is a valid PNG",
+          "passed": true,
+          "evidence": "ok"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 0,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 7,
+        "failed": 0,
+        "total": 7,
+        "time_seconds": 286.2,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "schedule.csv parses",
+          "passed": true,
+          "evidence": "parsed 12 rows"
+        },
+        {
+          "text": "CCPM: zero overloaded resource-days (leveling worked)",
+          "passed": true,
+          "evidence": "0 overloaded resource-days"
+        },
+        {
+          "text": "CCPM: exactly one project buffer ending the schedule",
+          "passed": true,
+          "evidence": "1 PB(s), end 36 vs 36"
+        },
+        {
+          "text": "CCPM: feeding buffer(s) protect non-critical chains",
+          "passed": true,
+          "evidence": "2 feeding buffer(s)"
+        },
+        {
+          "text": "CCPM: buffers attached via :PB/:FB link types",
+          "passed": true,
+          "evidence": "PB=W9:PB; FB1=W3:FB; FB2=W7:FB"
+        },
+        {
+          "text": "CCPM: project buffer ~50% of critical chain",
+          "passed": true,
+          "evidence": "PB=12, CC=23"
+        },
+        {
+          "text": "gantt.png exists and is a valid PNG",
+          "passed": true,
+          "evidence": "ok"
+        }
+      ],
+      "notes": []
+    }
+  ],
+  "run_summary": {
+    "cpm_baseline": {
+      "pass_rate": {
+        "mean": 0.9375,
+        "stddev": 0.125,
+        "min": 0.75,
+        "max": 1.0
+      },
+      "time_seconds": {
+        "mean": 1.0,
+        "stddev": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "tokens": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "with_skill": {
+      "pass_rate": {
+        "mean": 1.0,
+        "stddev": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "time_seconds": {
+        "mean": 334.025,
+        "stddev": 81.5462,
+        "min": 245.6,
+        "max": 418.9
+      },
+      "tokens": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "delta": {
+      "pass_rate": "-0.06",
+      "time_seconds": "-333.0",
+      "tokens": "+0"
+    }
+  },
+  "notes": [
+    "Evaluation redefined per Rudiger's direction: the comparison is CCPM-with-skill vs a deterministic traditional-CPM baseline (ASAP, safe durations, resources ignored, no buffers) - not with-skill vs without-skill. Configurations: with_skill = CCPM, cpm_baseline = CPM reference.",
+    "Headline result: all 4 CCPM schedules are fully resource-leveled (0 overloaded resource-days) with one project buffer and feeding buffers attached via :PB/:FB links, and all passed the skill's validator. The CPM baselines overload resources in 3 of 4 projects (website 2, kitchen 8, retrofit 4 overloaded resource-days) - visible as red blocks in each comparison.png.",
+    "Lab-trials is the honest negative: its ASAP CPM layout happens to be conflict-free, so the 'CPM shows overloading' assertion fails there. Not every network overloads under CPM; the skill's value there is the buffer structure, not leveling.",
+    "Promise-date story: CPM promises the bare critical-path end (e.g. retrofit day 36 with an infeasible plan); CCPM finishes the work earlier on aggressive durations (day 23) and promises day 35 with 12 days of explicit protection - a slightly earlier AND feasible AND protected commitment.",
+    "Noted for a future skill iteration: the deterministic earlier-only leveling rule can be suboptimal (retrofit subagent reported a ~20-day hand-optimized chain vs 23 produced). Determinism was chosen deliberately for CLI convertibility; revisit if schedule quality matters more than reproducibility."
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "eval_id": 2,
+  "eval_name": "kitchen-renovation",
+  "prompt": "CCPM schedule for kitchen renovation; comfortable estimates; 3 trades. (Compared against a deterministic traditional-CPM baseline: no leveling, no buffers.)",
+  "assertions": []
+}

@@ -1,0 +1,49 @@
+{
+  "expectations": [
+    {
+      "text": "schedule.csv parses",
+      "passed": true,
+      "evidence": "parsed 12 rows"
+    },
+    {
+      "text": "CCPM: zero overloaded resource-days (leveling worked)",
+      "passed": true,
+      "evidence": "0 overloaded resource-days"
+    },
+    {
+      "text": "CCPM: exactly one project buffer ending the schedule",
+      "passed": true,
+      "evidence": "1 PB(s), end 36 vs 36"
+    },
+    {
+      "text": "CCPM: feeding buffer(s) protect non-critical chains",
+      "passed": true,
+      "evidence": "2 feeding buffer(s)"
+    },
+    {
+      "text": "CCPM: buffers attached via :PB/:FB link types",
+      "passed": true,
+      "evidence": "PB=W9:PB; FB1=W3:FB; FB2=W7:FB"
+    },
+    {
+      "text": "CCPM: project buffer ~50% of critical chain",
+      "passed": true,
+      "evidence": "PB=12, CC=23"
+    },
+    {
+      "text": "gantt.png exists and is a valid PNG",
+      "passed": true,
+      "evidence": "ok"
+    }
+  ],
+  "summary": {
+    "passed": 7,
+    "failed": 0,
+    "total": 7,
+    "pass_rate": 1.0
+  },
+  "timing": {
+    "total_duration_seconds": 286.2,
+    "total_tokens": 56149
+  }
+}

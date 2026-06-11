@@ -1,0 +1,54 @@
+{
+  "expectations": [
+    {
+      "text": "schedule.csv exists and parses into start/finish/duration rows",
+      "passed": true,
+      "evidence": "parsed 8 rows"
+    },
+    {
+      "text": "prose input normalized: all 6 tasks scheduled with 50%-cut durations",
+      "passed": true,
+      "evidence": "ok"
+    },
+    {
+      "text": "all precedence constraints respected",
+      "passed": true,
+      "evidence": "ok"
+    },
+    {
+      "text": "single builder never double-booked",
+      "passed": true,
+      "evidence": "ok"
+    },
+    {
+      "text": "exactly one project buffer, placed at schedule end",
+      "passed": true,
+      "evidence": "ok"
+    },
+    {
+      "text": "project buffer sized ~50% of critical chain",
+      "passed": true,
+      "evidence": "ok"
+    },
+    {
+      "text": "Tiling on the critical chain (builder resource link)",
+      "passed": true,
+      "evidence": "ok"
+    },
+    {
+      "text": "gantt.png exists and is a valid PNG",
+      "passed": true,
+      "evidence": "valid PNG header"
+    }
+  ],
+  "summary": {
+    "passed": 8,
+    "failed": 0,
+    "total": 8,
+    "pass_rate": 1.0
+  },
+  "timing": {
+    "total_duration_seconds": 125.0,
+    "total_tokens": 26238
+  }
+}

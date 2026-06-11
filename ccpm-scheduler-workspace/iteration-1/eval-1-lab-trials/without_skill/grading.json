@@ -1,0 +1,54 @@
+{
+  "expectations": [
+    {
+      "text": "schedule.csv exists and parses into start/finish/duration rows",
+      "passed": true,
+      "evidence": "parsed 11 rows"
+    },
+    {
+      "text": "durations used as given (already aggressive, NOT cut again)",
+      "passed": true,
+      "evidence": "ok"
+    },
+    {
+      "text": "all precedence constraints respected",
+      "passed": true,
+      "evidence": "ok"
+    },
+    {
+      "text": "no resource double-booking (eng/sci capacity 1)",
+      "passed": true,
+      "evidence": "ok"
+    },
+    {
+      "text": "exactly one project buffer, placed at schedule end",
+      "passed": false,
+      "evidence": "2 project buffer(s); pb=12.0, cc_len=24.0, end=36.0/36.0"
+    },
+    {
+      "text": "project buffer sized ~50% of critical chain",
+      "passed": true,
+      "evidence": "ok"
+    },
+    {
+      "text": "secondary deliverable branch (P6->P8) protected by a buffer",
+      "passed": true,
+      "evidence": "ok"
+    },
+    {
+      "text": "gantt.png exists and is a valid PNG",
+      "passed": true,
+      "evidence": "valid PNG header"
+    }
+  ],
+  "summary": {
+    "passed": 7,
+    "failed": 1,
+    "total": 8,
+    "pass_rate": 0.875
+  },
+  "timing": {
+    "total_duration_seconds": 193.4,
+    "total_tokens": 34952
+  }
+}

@@ -1,0 +1,13 @@
+id,name,type,chain,start,finish,duration,resources
+W1,Content outline,task,feeding-2,0,3,3,writer
+W5,Build backend,task,critical,1,9,8,dev
+W3,Design mockups,task,feeding-1,3,7,4,designer
+W2,Draft copy,task,feeding-2,5,10,5,writer
+FB1,Feeding buffer 1,feeding_buffer,feeding-1,7,9,2,
+W4,Build frontend,task,critical,9,15,6,dev
+W7,Edit copy,task,feeding-2,10,13,3,editor
+FB2,Feeding buffer 2,feeding_buffer,feeding-2,13,19,6,
+W6,Integrate,task,critical,15,19,4,dev
+W8,Load content,task,critical,19,21,2,writer
+W9,Launch QA,task,critical,21,24,3,qa
+PB,Project buffer,project_buffer,critical,24,36,12,

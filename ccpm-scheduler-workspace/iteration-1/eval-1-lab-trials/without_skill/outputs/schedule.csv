@@ -1,0 +1,12 @@
+id,name,type,resource,duration_days,start_day,end_day,start_date,end_date,chain
+P1,Procure rig,task,eng,6,0,6,2026-06-15,2026-06-22,Critical chain
+P2,Write protocol,task,sci,4,0,4,2026-06-15,2026-06-18,Feeding chain
+P3,Install rig,task,eng,5,6,11,2026-06-23,2026-06-29,Critical chain
+P4,Calibrate,task,sci,4,11,15,2026-06-30,2026-07-03,Critical chain
+FB1,Feeding buffer (protocol -> trials),buffer,-,2,13,15,2026-07-02,2026-07-03,Feeding buffer
+P5,Run trial A,task,sci,6,15,21,2026-07-06,2026-07-13,Critical chain
+P6,Run trial B,task,eng,5,15,20,2026-07-06,2026-07-10,Secondary chain (Report B)
+P8,Report B,task,eng,3,20,23,2026-07-13,2026-07-15,Secondary chain (Report B)
+P7,Report A,task,sci,3,21,24,2026-07-14,2026-07-16,Critical chain
+PB-B,Project buffer - Report B,buffer,-,12,23,35,2026-07-16,2026-07-31,Project buffer (Report B)
+PB-A,Project buffer - Report A,buffer,-,12,24,36,2026-07-17,2026-08-03,Project buffer (Report A)

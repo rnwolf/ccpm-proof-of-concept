@@ -1,0 +1,12 @@
+id,name,type,chain,start,finish,duration,resources,predecessors
+P1,Procure rig,task,critical,0,6,6,eng,
+P3,Install rig,task,critical,6,11,5,eng,P1
+P2,Write protocol,task,feeding-1,7,11,4,sci,
+FB1,Feeding buffer 1,feeding_buffer,feeding-1,11,15,4,,P2:FB
+P4,Calibrate,task,critical,11,15,4,sci,P3
+P6,Run trial B,task,feeding-2,15,20,5,eng,P2;P4
+P5,Run trial A,task,critical,15,21,6,sci,P2;P4
+P8,Report B,task,feeding-2,20,23,3,eng,P6
+P7,Report A,task,critical,21,24,3,sci,P5
+FB2,Feeding buffer 2,feeding_buffer,feeding-2,23,24,1,,P8:FB
+PB,Project buffer,project_buffer,critical,24,36,12,,P7:PB

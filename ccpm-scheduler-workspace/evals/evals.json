@@ -1,0 +1,46 @@
+{
+  "skill_name": "ccpm-scheduler",
+  "philosophy": "Compare CCPM-with-skill output against a deterministic traditional-CPM baseline (cpm_baseline.py: ASAP, safe durations, no resource leveling, no buffers). Success = CCPM schedule is resource-feasible (0 overloaded resource-days) with :PB/:FB-attached buffers, while the CPM Gantt's utilization panel typically shows red over-capacity blocks. Side-by-side charts in iteration-2/<eval>/comparison.png.",
+  "evals": [
+    {
+      "id": 0,
+      "eval_name": "website-launch",
+      "prompt": "Build a CCPM schedule for the website relaunch (tasks.csv safe estimates, resources.csv).",
+      "files": [
+        "inputs/website-launch/tasks.csv",
+        "inputs/website-launch/resources.csv"
+      ],
+      "expected_output": "Leveled, buffered CCPM schedule; CPM baseline overloads dev."
+    },
+    {
+      "id": 1,
+      "eval_name": "lab-trials",
+      "prompt": "CCPM schedule; durations already aggressive (no cut); two sink reports.",
+      "files": [
+        "inputs/lab-trials/tasks.csv",
+        "inputs/lab-trials/resources.csv"
+      ],
+      "expected_output": "No double-cut; both sinks buffered. CPM baseline happens to be conflict-free (honest negative for the overload contrast)."
+    },
+    {
+      "id": 2,
+      "eval_name": "kitchen-renovation",
+      "prompt": "CCPM schedule for kitchen renovation, comfortable estimates, 3 trades.",
+      "files": [
+        "inputs/kitchen-renovation/tasks.csv",
+        "inputs/kitchen-renovation/resources.csv"
+      ],
+      "expected_output": "Builder contention leveled, Tiling on critical chain via resource link; CPM overloads builder 8 resource-days."
+    },
+    {
+      "id": 3,
+      "eval_name": "equipment-retrofit",
+      "prompt": "CCPM schedule for machine retrofit with heavy mechanical-fitter contention.",
+      "files": [
+        "inputs/equipment-retrofit/tasks.csv",
+        "inputs/equipment-retrofit/resources.csv"
+      ],
+      "expected_output": "Fitter conflicts leveled (resource link in chain); CPM overloads mech 4 resource-days."
+    }
+  ]
+}

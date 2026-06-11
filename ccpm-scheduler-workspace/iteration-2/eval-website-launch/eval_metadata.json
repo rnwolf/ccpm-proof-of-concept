@@ -1,0 +1,6 @@
+{
+  "eval_id": 0,
+  "eval_name": "website-launch",
+  "prompt": "Build a CCPM schedule for the website relaunch (safe estimates, 5 people). (Compared against a deterministic traditional-CPM baseline: no leveling, no buffers.)",
+  "assertions": []
+}

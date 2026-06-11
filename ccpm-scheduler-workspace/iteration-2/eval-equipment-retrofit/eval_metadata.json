@@ -1,0 +1,6 @@
+{
+  "eval_id": 3,
+  "eval_name": "equipment-retrofit",
+  "prompt": "CCPM schedule for machine retrofit; heavy mechanical-fitter contention. (Compared against a deterministic traditional-CPM baseline: no leveling, no buffers.)",
+  "assertions": []
+}

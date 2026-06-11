@@ -1,0 +1,428 @@
+{
+  "metadata": {
+    "skill_name": "ccpm-scheduler",
+    "skill_path": "<path/to/skill>",
+    "executor_model": "<model-name>",
+    "analyzer_model": "<model-name>",
+    "timestamp": "2026-06-10T20:30:53Z",
+    "evals_run": [
+      0,
+      1,
+      2
+    ],
+    "runs_per_configuration": 3
+  },
+  "runs": [
+    {
+      "eval_id": 0,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 9,
+        "failed": 0,
+        "total": 9,
+        "time_seconds": 317.8,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "schedule.csv exists and parses into start/finish/duration rows",
+          "passed": true,
+          "evidence": "parsed 12 rows"
+        },
+        {
+          "text": "safe durations cut to ceil(safe/2) aggressive durations",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "all precedence constraints respected",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "no resource double-booking (capacity 1)",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "exactly one project buffer, placed at schedule end",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "project buffer sized ~50% of critical chain",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "critical chain reflects dev resource link (W4 and W5 both critical)",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "at least one feeding buffer protects a non-critical chain",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "gantt.png exists and is a valid PNG",
+          "passed": true,
+          "evidence": "valid PNG header"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 1,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 8,
+        "failed": 0,
+        "total": 8,
+        "time_seconds": 283.3,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "schedule.csv exists and parses into start/finish/duration rows",
+          "passed": true,
+          "evidence": "parsed 11 rows"
+        },
+        {
+          "text": "durations used as given (already aggressive, NOT cut again)",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "all precedence constraints respected",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "no resource double-booking (eng/sci capacity 1)",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "exactly one project buffer, placed at schedule end",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "project buffer sized ~50% of critical chain",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "secondary deliverable branch (P6->P8) protected by a buffer",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "gantt.png exists and is a valid PNG",
+          "passed": true,
+          "evidence": "valid PNG header"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 2,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 8,
+        "failed": 0,
+        "total": 8,
+        "time_seconds": 209.4,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "schedule.csv exists and parses into start/finish/duration rows",
+          "passed": true,
+          "evidence": "parsed 8 rows"
+        },
+        {
+          "text": "prose input normalized: all 6 tasks scheduled with 50%-cut durations",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "all precedence constraints respected",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "single builder never double-booked",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "exactly one project buffer, placed at schedule end",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "project buffer sized ~50% of critical chain",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "Tiling on the critical chain (builder resource link)",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "gantt.png exists and is a valid PNG",
+          "passed": true,
+          "evidence": "valid PNG header"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 0,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 9,
+        "failed": 0,
+        "total": 9,
+        "time_seconds": 192.3,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "schedule.csv exists and parses into start/finish/duration rows",
+          "passed": true,
+          "evidence": "parsed 12 rows"
+        },
+        {
+          "text": "safe durations cut to ceil(safe/2) aggressive durations",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "all precedence constraints respected",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "no resource double-booking (capacity 1)",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "exactly one project buffer, placed at schedule end",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "project buffer sized ~50% of critical chain",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "critical chain reflects dev resource link (W4 and W5 both critical)",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "at least one feeding buffer protects a non-critical chain",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "gantt.png exists and is a valid PNG",
+          "passed": true,
+          "evidence": "valid PNG header"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 1,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.875,
+        "passed": 7,
+        "failed": 1,
+        "total": 8,
+        "time_seconds": 193.4,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "schedule.csv exists and parses into start/finish/duration rows",
+          "passed": true,
+          "evidence": "parsed 11 rows"
+        },
+        {
+          "text": "durations used as given (already aggressive, NOT cut again)",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "all precedence constraints respected",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "no resource double-booking (eng/sci capacity 1)",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "exactly one project buffer, placed at schedule end",
+          "passed": false,
+          "evidence": "2 project buffer(s); pb=12.0, cc_len=24.0, end=36.0/36.0"
+        },
+        {
+          "text": "project buffer sized ~50% of critical chain",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "secondary deliverable branch (P6->P8) protected by a buffer",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "gantt.png exists and is a valid PNG",
+          "passed": true,
+          "evidence": "valid PNG header"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 2,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 8,
+        "failed": 0,
+        "total": 8,
+        "time_seconds": 125.0,
+        "tokens": 0,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "schedule.csv exists and parses into start/finish/duration rows",
+          "passed": true,
+          "evidence": "parsed 8 rows"
+        },
+        {
+          "text": "prose input normalized: all 6 tasks scheduled with 50%-cut durations",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "all precedence constraints respected",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "single builder never double-booked",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "exactly one project buffer, placed at schedule end",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "project buffer sized ~50% of critical chain",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "Tiling on the critical chain (builder resource link)",
+          "passed": true,
+          "evidence": "ok"
+        },
+        {
+          "text": "gantt.png exists and is a valid PNG",
+          "passed": true,
+          "evidence": "valid PNG header"
+        }
+      ],
+      "notes": []
+    }
+  ],
+  "run_summary": {
+    "with_skill": {
+      "pass_rate": {
+        "mean": 1.0,
+        "stddev": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "time_seconds": {
+        "mean": 270.1667,
+        "stddev": 55.3805,
+        "min": 209.4,
+        "max": 317.8
+      },
+      "tokens": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "without_skill": {
+      "pass_rate": {
+        "mean": 0.9583,
+        "stddev": 0.0722,
+        "min": 0.875,
+        "max": 1.0
+      },
+      "time_seconds": {
+        "mean": 170.2333,
+        "stddev": 39.1771,
+        "min": 125.0,
+        "max": 193.4
+      },
+      "tokens": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "delta": {
+      "pass_rate": "+0.04",
+      "time_seconds": "+99.9",
+      "tokens": "+0"
+    }
+  },
+  "notes": [
+    "Baselines are strong: the model already knows CCPM, so most assertions pass without the skill. The discriminating assertion was 'exactly one project buffer' - the lab-trials baseline used two project buffers instead of one project buffer plus a feeding buffer for the secondary deliverable.",
+    "The skill's main observed value-add is consistency rather than raw correctness: a fixed schedule.csv schema, a validation gate before presenting results, deterministic tie-breaks, and integer-day arithmetic. The website-launch baseline produced fractional days (an 11.5-day buffer and a day-34.5 completion promise), which is awkward to communicate and harder to feed into downstream tooling.",
+    "Cost: with-skill runs used roughly 40-60% more tokens and about 60% more wall time, spent reading the skill and running the validator loop.",
+    "Assertions that passed in every configuration (PNG validity, precedence, no double-booking) do not discriminate; harder test networks would make them earn their keep."
+  ]
+}

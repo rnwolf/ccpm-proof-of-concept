@@ -1,0 +1,9 @@
+Task,Resource,Original estimate (days),Focused duration (days),Start (day),Finish (day),Type,Predecessors
+Demolition,Builder,8,4,0,4,Critical chain,-
+Electrics,Electrician,6,3,4,7,Feeding chain,Demolition
+Plumbing,Plumber,6,3,4,7,Critical chain,Demolition
+Feeding buffer (Electrics),-,0,2,7,9,Feeding buffer,Electrics
+Tiling,Builder,8,4,7,11,Critical chain,Plumbing; Builder free
+Cabinets,Builder,10,5,11,16,Critical chain,Electrics; Plumbing; Tiling (builder)
+Worktops & finishing,Builder,6,3,16,19,Critical chain,Cabinets
+Project buffer,-,0,10,19,29,Project buffer,Worktops & finishing

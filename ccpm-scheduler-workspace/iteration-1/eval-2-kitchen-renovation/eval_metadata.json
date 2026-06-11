@@ -1,0 +1,6 @@
+{
+  "eval_id": 2,
+  "eval_name": "kitchen-renovation-inline-text",
+  "prompt": "Can you build a critical chain schedule for my kitchen renovation? Tasks: Demolition takes 8 days (builder), then Electrics 6 days (electrician) and Plumbing 6 days (plumber) can both start. Cabinets need both electrics and plumbing done first, 10 days (builder). Worktops and finishing after cabinets, 6 days (builder). Tiling can start once plumbing is done, 8 days (builder). One builder, one electrician, one plumber. Those are comfortable estimates with slack built in.",
+  "assertions": []
+}

@@ -1,0 +1,10 @@
+id,name,duration_safe,predecessors,resources
+W1,Content outline,6,,writer
+W2,Draft copy,10,W1,writer
+W3,Design mockups,8,W1,designer
+W4,Build frontend,12,W3,dev
+W5,Build backend,16,,dev
+W6,Integrate,8,W4;W5,dev
+W7,Edit copy,6,W2,editor
+W8,Load content,4,W6;W7,writer
+W9,Launch QA,6,W8,qa

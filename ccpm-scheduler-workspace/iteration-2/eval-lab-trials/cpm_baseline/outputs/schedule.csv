@@ -1,0 +1,9 @@
+id,name,type,chain,start,finish,duration,resources,predecessors
+P1,Procure rig,task,critical,0,6,6,eng,
+P2,Write protocol,task,none,0,4,4,sci,
+P3,Install rig,task,critical,6,11,5,eng,P1
+P4,Calibrate,task,critical,11,15,4,sci,P3
+P5,Run trial A,task,critical,15,21,6,sci,P2;P4
+P6,Run trial B,task,none,15,20,5,eng,P2;P4
+P7,Report A,task,critical,21,24,3,sci,P5
+P8,Report B,task,none,20,23,3,eng,P6

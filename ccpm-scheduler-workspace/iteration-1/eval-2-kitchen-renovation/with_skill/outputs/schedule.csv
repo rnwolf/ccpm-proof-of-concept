@@ -1,0 +1,9 @@
+id,name,type,chain,start,finish,duration,resources
+DEM,Demolition,task,critical,0,4,4,builder
+PLU,Plumbing,task,critical,4,7,3,plumber
+ELE,Electrics,task,feeding-1,6,9,3,electrician
+TIL,Tiling,task,critical,7,11,4,builder
+FB1,Feeding buffer 1,feeding_buffer,feeding-1,9,11,2,
+CAB,Cabinets,task,critical,11,16,5,builder
+WOR,Worktops and finishing,task,critical,16,19,3,builder
+PB,Project buffer,project_buffer,critical,19,29,10,

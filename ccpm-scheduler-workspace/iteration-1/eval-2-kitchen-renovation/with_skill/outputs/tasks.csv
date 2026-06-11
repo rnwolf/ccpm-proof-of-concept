@@ -1,0 +1,7 @@
+id,name,duration_safe,duration_aggressive,predecessors,resources
+DEM,Demolition,8,,,builder
+ELE,Electrics,6,,DEM,electrician
+PLU,Plumbing,6,,DEM,plumber
+CAB,Cabinets,10,,ELE;PLU,builder
+WOR,Worktops and finishing,6,,CAB,builder
+TIL,Tiling,8,,PLU,builder

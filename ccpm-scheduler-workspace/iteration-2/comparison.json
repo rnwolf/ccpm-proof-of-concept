@@ -1,0 +1,34 @@
+[
+  {
+    "eval": "eval-website-launch",
+    "cpm_overloaded_resource_days": 2,
+    "ccpm_overloaded_resource_days": 0,
+    "cpm_promise_unprotected": 44,
+    "ccpm_work_finish": 24,
+    "ccpm_promise_buffered": 36
+  },
+  {
+    "eval": "eval-lab-trials",
+    "cpm_overloaded_resource_days": 0,
+    "ccpm_overloaded_resource_days": 0,
+    "cpm_promise_unprotected": 24,
+    "ccpm_work_finish": 24,
+    "ccpm_promise_buffered": 36
+  },
+  {
+    "eval": "eval-kitchen-renovation",
+    "cpm_overloaded_resource_days": 8,
+    "ccpm_overloaded_resource_days": 0,
+    "cpm_promise_unprotected": 30,
+    "ccpm_work_finish": 19,
+    "ccpm_promise_buffered": 29
+  },
+  {
+    "eval": "eval-equipment-retrofit",
+    "cpm_overloaded_resource_days": 4,
+    "ccpm_overloaded_resource_days": 0,
+    "cpm_promise_unprotected": 36,
+    "ccpm_work_finish": 23,
+    "ccpm_promise_buffered": 35
+  }
+]

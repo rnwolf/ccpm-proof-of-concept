@@ -1,0 +1,6 @@
+{
+  "eval_id": 0,
+  "eval_name": "website-launch-csv-inputs",
+  "prompt": "I'm planning a website relaunch and want a critical chain (CCPM) schedule. The task list is in tasks.csv and the people available are in resources.csv. The durations in the file are our normal 'safe' estimates - I know CCPM cuts those. Please produce the schedule with buffers, tell me the promised completion day, and give me a Gantt chart.",
+  "assertions": []
+}
