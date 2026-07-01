@@ -4,14 +4,16 @@ dependency-link arrows and a resource-utilization sub-chart on the same
 time axis.
 
 Usage: python plot_gantt.py schedule.csv gantt.png [--title "My project"]
-                            [--resources resources.csv] [--no-utilization]
+                            [--resources resources.csv]
+                            [--calendar calendar.csv] [--no-utilization]
                             [--no-links]
 
-Dependency links are read from an optional `predecessors` column in
-schedule.csv. Link notation: `A` (Finish-to-Start, the default), `A:SS`,
-`A:FF`, `A:SF`, with optional lag, e.g. `A:SS+2`. Multiple links are
-separated by `;`. Arrows are drawn for every link; non-FS links carry a
-small SS/FF/SF label since readers assume FS by default.
+Dependency links are read from an optional `predecessor_ids` column in
+schedule.csv (legacy name `predecessors` also accepted). Link notation:
+`A` (Finish-to-Start, the default), `A:SS`, `A:FF`, `A:SF`, with optional
+lag, e.g. `A:SS+2`. Multiple links are separated by `;`. Arrows are drawn
+for every link; non-FS links carry a small SS/FF/SF label since readers
+assume FS by default.
 
 Buffer attachments use the CCPM-specific types `:PB` (project buffer) and
 `:FB` (feeding buffer). They are drawn dashed, because a buffer is not work
@@ -24,9 +26,15 @@ commitment-date diamond.
 The utilization panel shows, per resource per day, how much capacity is used.
 Within capacity = steelblue; over capacity = red (a red block means the
 leveling step failed). Pass --resources to use real capacities; default is 1.
+Pass --calendar for day-range capacity overrides (`resource_id, from, to,
+capacity`, half-open [from, to)): days with capacity 0 are drawn as grey
+hatched "unavailable" blocks, and overload detection uses the effective
+per-day capacity.
 
-Color code (Gantt): critical chain = firebrick, feeding chains = colored,
-buffers = gold/khaki with hatching, other tasks = grey.
+Color code (Gantt): critical chain = firebrick with cross-hatch (so it stays
+distinguishable from other red-ish bars and in greyscale prints), feeding
+chains = colored, buffers = gold/khaki with diagonal hatching, other tasks
+= grey.
 """
 import csv
 import re
@@ -45,6 +53,14 @@ def split_ids(s):
     return [x for x in (s or "").replace(";", " ").replace(",", " ").split() if x]
 
 
+def field(row, *names):
+    """First present value among column names (new name first, legacy after)."""
+    for n in names:
+        if row.get(n) is not None:
+            return row[n]
+    return ""
+
+
 def parse_links(s):
     """'A;B:SS+2' -> [('A','FS',0), ('B','SS',2)]"""
     links = []
@@ -58,7 +74,8 @@ def parse_links(s):
 
 
 def main(schedule_path, out_path, title="CCPM Schedule",
-         resources_path=None, show_util=True, show_links=True):
+         resources_path=None, calendar_path=None,
+         show_util=True, show_links=True):
     with open(schedule_path, newline="", encoding="utf-8-sig") as f:
         rows = list(csv.DictReader(f))
     for r in rows:
@@ -70,15 +87,28 @@ def main(schedule_path, out_path, title="CCPM Schedule",
             for rr in csv.DictReader(f):
                 capacity[rr["id"]] = int(rr.get("capacity") or 1)
 
+    overrides = defaultdict(list)  # resource -> [(from, to, capacity)]
+    if calendar_path:
+        with open(calendar_path, newline="", encoding="utf-8-sig") as f:
+            for rr in csv.DictReader(f):
+                overrides[rr["resource_id"]].append(
+                    (int(rr["from"]), int(rr["to"]), int(rr["capacity"])))
+
+    def cap_on(res, day):
+        for lo, hi, cap in overrides.get(res, ()):
+            if lo <= day < hi:
+                return cap
+        return capacity.get(res, 1)
+
     # daily demand per resource (tasks only - buffers consume no resources)
     demand = defaultdict(lambda: defaultdict(int))
     for r in rows:
         if r["type"] != "task":
             continue
-        for res in split_ids(r.get("resources")):
+        for res in split_ids(field(r, "resource_ids", "resources")):
             for day in range(r["start"], r["finish"]):
                 demand[res][day] += 1
-    resources = sorted(set(demand) | set(capacity))
+    resources = sorted(set(demand) | set(capacity) | set(overrides))
     show_util = show_util and bool(resources)
 
     rows.sort(key=lambda r: (r["start"], r["finish"], r["id"]))
@@ -110,14 +140,14 @@ def main(schedule_path, out_path, title="CCPM Schedule",
         elif r["type"] == "feeding_buffer":
             color, hatch = "khaki", "//"
         elif r["chain"] == "critical":
-            color, hatch = "firebrick", None
+            color, hatch = "firebrick", "xx"
         elif r["chain"] in feed_color:
             color, hatch = feed_color[r["chain"]], None
         else:
             color, hatch = "grey", None
         ax.barh(y, dur, left=r["start"], height=0.6, color=color,
                 hatch=hatch, edgecolor="black", linewidth=0.5, zorder=2)
-        res = (r.get("resources") or "").replace(";", ",")
+        res = field(r, "resource_ids", "resources").replace(";", ",")
         if res:
             ax.text(r["finish"] + 0.2, y, res, va="center", fontsize=8,
                     color="dimgrey", zorder=3)
@@ -136,7 +166,7 @@ def main(schedule_path, out_path, title="CCPM Schedule",
     if show_links:
         byid = {r["id"]: r for r in rows}
         for r in rows:
-            for pid, ltype, lag in parse_links(r.get("predecessors", "")):
+            for pid, ltype, lag in parse_links(field(r, "predecessor_ids", "predecessors")):
                 p = byid.get(pid)
                 if p is None:
                     continue
@@ -171,8 +201,8 @@ def main(schedule_path, out_path, title="CCPM Schedule",
     ax.set_xlim(0, t_end + 1)
     ax.set_ylim(0.3, len(rows) + 0.7)
     ax.legend(handles=[
-        Patch(facecolor="firebrick", label="Critical chain"),
-        Patch(facecolor="steelblue", label="Feeding chain"),
+        Patch(facecolor="firebrick", hatch="xx", label="Critical chain"),
+        Patch(facecolor=feed_cmap(2), label="Feeding chain"),
         Patch(facecolor="gold", hatch="//", label="Project buffer"),
         Patch(facecolor="khaki", hatch="//", label="Feeding buffer"),
     ], loc="lower right", bbox_to_anchor=(1.0, 1.02), ncol=4, fontsize=8, frameon=False)
@@ -181,9 +211,12 @@ def main(schedule_path, out_path, title="CCPM Schedule",
     if axu is not None:
         for j, res in enumerate(resources):
             y = n_res - j
-            cap = capacity.get(res, 1)
             for day in range(t_end):
+                cap = cap_on(res, day)
                 d = demand[res].get(day, 0)
+                if cap == 0:
+                    axu.barh(y, 1, left=day, height=0.7, color="0.85",
+                             hatch="///", edgecolor="white", linewidth=0.3)
                 if d == 0:
                     continue
                 over = d > cap
@@ -198,7 +231,17 @@ def main(schedule_path, out_path, title="CCPM Schedule",
         axu.set_yticklabels(
             [f"{r} (cap {capacity.get(r, 1)})" for r in resources], fontsize=9)
         axu.set_ylim(0.4, n_res + 0.6)
-        axu.set_title("Resource utilization", fontsize=10)
+        axu.set_title("Resource utilization", fontsize=10, loc="left")
+        util_handles = [
+            Patch(facecolor="steelblue", label="Within capacity"),
+            Patch(facecolor="red", label="Overloaded (over capacity)"),
+        ]
+        if overrides:
+            util_handles.append(
+                Patch(facecolor="0.85", hatch="///", label="Unavailable"))
+        axu.legend(handles=util_handles, loc="lower right",
+                   bbox_to_anchor=(1.0, 1.0), ncol=len(util_handles),
+                   fontsize=8, frameon=False)
         axu.grid(axis="x", linestyle=":", alpha=0.5)
         axu.set_xlabel("Working day")
     else:
@@ -214,13 +257,17 @@ if __name__ == "__main__":
     if len(argv) < 3:
         print(__doc__)
         sys.exit(2)
-    title, resources_path, show_util, show_links = "CCPM Schedule", None, True, True
+    title, resources_path, calendar_path = "CCPM Schedule", None, None
+    show_util, show_links = True, True
     if "--title" in argv:
         i = argv.index("--title"); title = argv[i + 1]; del argv[i:i + 2]
     if "--resources" in argv:
         i = argv.index("--resources"); resources_path = argv[i + 1]; del argv[i:i + 2]
+    if "--calendar" in argv:
+        i = argv.index("--calendar"); calendar_path = argv[i + 1]; del argv[i:i + 2]
     if "--no-utilization" in argv:
         argv.remove("--no-utilization"); show_util = False
     if "--no-links" in argv:
         argv.remove("--no-links"); show_links = False
-    main(argv[1], argv[2], title, resources_path, show_util, show_links)
+    main(argv[1], argv[2], title, resources_path, calendar_path,
+         show_util, show_links)

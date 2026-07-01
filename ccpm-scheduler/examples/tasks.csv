@@ -1,7 +1,7 @@
-id,name,duration_safe,predecessors,resources
-A,Spec,10,,blue
-B,Build,20,A,green
-C,Design,10,A,blue
-D,Integrate,20,B,blue
-E,Test rig,10,C,green
-F,Commission,10,D;E,red
+id,name,duration_safe,predecessor_ids,resource_ids,url
+A,Spec,10,,blue,https://example.com/wiki/spec
+B,Build,20,A,green,https://example.com/tickets/build
+C,Design,10,A,blue,https://example.com/wiki/design
+D,Integrate,20,B,blue,https://example.com/tickets/integrate
+E,Test rig,10,C,green,https://example.com/tickets/test-rig
+F,Commission,10,D;E,red,https://example.com/wiki/commissioning
